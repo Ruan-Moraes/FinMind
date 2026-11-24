@@ -10,10 +10,6 @@ import {
   type ProviderIntegrationState,
 } from '@/features/ai-copilot/domain/ai-provider-types';
 import { isAuthenticApiKey } from '@/features/ai-copilot/models';
-import {
-  executeContextualFinancialAssistant,
-  type AssistantStructuredResponse,
-} from '@/features/ai-copilot/assistant';
 import { resolveUserProviderCredentials } from '@/features/ai-copilot/services/ai-credentials-service';
 import { invalidateProviderModelsCache } from '@/features/ai-copilot/services/official-models-discovery';
 import { buildProviderIntegrationState } from '@/features/ai-copilot/services/ai-provider-state-service';
@@ -161,32 +157,5 @@ export async function selectActiveAiModelAction(data: {
   } catch (err) {
     console.error('[selectActiveAiModelAction]', err);
     return { ok: false, error: 'Não foi possível salvar a seleção do modelo.' };
-  }
-}
-
-export async function askFinancialAssistantAction(data: {
-  question: string;
-  month?: number;
-  year?: number;
-  requireLiveLlm?: boolean;
-}): Promise<{ ok: boolean; response?: AssistantStructuredResponse; error?: string }> {
-  try {
-    const user = await requireAuthenticatedUser();
-    if (!data.question || !data.question.trim()) {
-      return { ok: false, error: 'Digite uma pergunta financeira para consultar o assistente.' };
-    }
-    const response = await executeContextualFinancialAssistant({
-      userId: user.id,
-      question: data.question.trim(),
-      referenceMonth: data.month,
-      referenceYear: data.year,
-      requireLiveLlm: data.requireLiveLlm,
-    });
-    return { ok: true, response };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : 'Erro ao processar consulta no assistente financeiro.',
-    };
   }
 }

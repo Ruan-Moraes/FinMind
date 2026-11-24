@@ -2,10 +2,7 @@
 
 import { prisma } from '@/shared/lib/prisma';
 import { requireAuthenticatedUser } from '@/features/auth';
-import {
-  executeContextualFinancialAssistant,
-  type AssistantStructuredResponse,
-} from '@/features/ai-copilot/assistant';
+import type { AssistantStructuredResponse } from '@/features/ai-copilot/assistant';
 import type { AgentTurnPayload } from '@/features/ai-agent/domain/agent-types';
 
 export interface SerializedChatSessionSummary {
@@ -24,12 +21,6 @@ export interface SerializedChatMessage {
   agentPayload?: AgentTurnPayload;
   mutationStatus?: 'AWAITING' | 'RUNNING' | 'SUCCEEDED' | 'CANCELLED' | 'FAILED' | 'ROLLED_BACK';
   createdAt: string;
-}
-
-function buildSessionTitle(question: string): string {
-  const clean = question.replace(/\s+/g, ' ').trim();
-  if (clean.length <= 56) return clean;
-  return `${clean.slice(0, 53).trimEnd()}...`;
 }
 
 export async function listAiChatSessionsAction(): Promise<{
@@ -131,98 +122,6 @@ export async function getAiChatSessionMessagesAction(sessionId: string): Promise
       createdAt: m.createdAt.toISOString(),
     })),
   };
-}
-
-export async function sendAiChatMessageAction(data: {
-  sessionId?: string | null;
-  question: string;
-  month?: number;
-  year?: number;
-}): Promise<{
-  ok: boolean;
-  sessionId?: string;
-  sessionTitle?: string;
-  response?: AssistantStructuredResponse;
-  error?: string;
-}> {
-  const user = await requireAuthenticatedUser();
-  const cleanQuestion = data.question.trim();
-  if (cleanQuestion.length < 2) {
-    return { ok: false, error: 'Digite uma pergunta válida para o assistente.' };
-  }
-
-  let activeSessionId = data.sessionId || '';
-  let activeSessionTitle = '';
-
-  if (activeSessionId) {
-    const existing = await prisma.aiChatSession.findFirst({
-      where: { id: activeSessionId, userId: user.id },
-      select: { id: true, title: true },
-    });
-    if (existing) {
-      activeSessionTitle = existing.title;
-    } else {
-      activeSessionId = '';
-    }
-  }
-
-  if (!activeSessionId) {
-    const created = await prisma.aiChatSession.create({
-      data: {
-        userId: user.id,
-        title: buildSessionTitle(cleanQuestion),
-      },
-      select: { id: true, title: true },
-    });
-    activeSessionId = created.id;
-    activeSessionTitle = created.title;
-  }
-
-  await prisma.aiChatMessage.create({
-    data: {
-      sessionId: activeSessionId,
-      role: 'user',
-      content: cleanQuestion,
-    },
-  });
-
-  try {
-    const response = await executeContextualFinancialAssistant({
-      userId: user.id,
-      question: cleanQuestion,
-      referenceMonth: data.month,
-      referenceYear: data.year,
-    });
-
-    await prisma.$transaction([
-      prisma.aiChatMessage.create({
-        data: {
-          sessionId: activeSessionId,
-          role: 'assistant',
-          content: response.directAnswer,
-          responseJson: JSON.stringify(response),
-        },
-      }),
-      prisma.aiChatSession.update({
-        where: { id: activeSessionId },
-        data: { updatedAt: new Date() },
-      }),
-    ]);
-
-    return {
-      ok: true,
-      sessionId: activeSessionId,
-      sessionTitle: activeSessionTitle,
-      response,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      sessionId: activeSessionId,
-      sessionTitle: activeSessionTitle,
-      error: err instanceof Error ? err.message : 'Falha ao consultar o assistente financeiro.',
-    };
-  }
 }
 
 export async function deleteAiChatSessionAction(sessionId: string): Promise<{ ok: boolean }> {

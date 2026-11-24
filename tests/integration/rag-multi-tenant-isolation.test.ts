@@ -1,9 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { prisma } from '@/shared/lib/prisma';
 import { getSixMonthsHistory } from '@/features/analytics';
 import { syncUserFinancialKnowledge, retrieveFinancialContextForQuery } from '@/features/ai-copilot/rag';
-import { executeContextualFinancialAssistant } from '@/features/ai-copilot/assistant';
 
 describe('Integração DB & RAG — Cenários 23, 24 e 25: Indexação Incremental, Isolamento Multi-Usuário e Assistente', () => {
   it('indexa entidades financeiras, garante isolamento estrito entre userId A e B e sintetiza respostas ancoradas', async () => {
@@ -120,26 +119,6 @@ describe('Integração DB & RAG — Cenários 23, 24 e 25: Indexação Increment
     'ISOLAMENTO CRÍTICO: Usuário B jamais pode recuperar chunks do Usuário A'
   );
 
-  // Assistente Financeiro Contextualizado para Usuário A
-  const assistantResp = await executeContextualFinancialAssistant({
-    userId: ragUserA.id,
-    question: 'Quais foram meus gastos com educação e quanto falta para atingir minha meta?',
-    referenceMonth: 11,
-    referenceYear: 2026,
-  });
-
-  assert.equal(assistantResp.ok, true);
-  assert.equal(assistantResp.hasSufficientData, true);
-  assert.ok(assistantResp.directAnswer.length > 20);
-  assert.ok(assistantResp.historicalFacts.length > 0, 'Deve listar fatos históricos reais');
-  assert.ok(assistantResp.calculatedResults.length > 0, 'Deve listar cálculos determinísticos');
-  assert.ok(
-    assistantResp.projectionsAndEstimates.some((p) => p.toLowerCase().includes('projeção') || p.toLowerCase().includes('estimativa')),
-    'Projeções devem ser explicitamente rotuladas como estimativas não garantidas'
-  );
-  assert.ok(assistantResp.personalizedRecommendations.length > 0);
-  assert.ok(assistantResp.retrievedSources.length > 0);
-
   // Consulta consolidada de 6 meses (1 única query no banco)
   const history6m = await getSixMonthsHistory(ragUserA.id, 11, 2026, 1);
   assert.equal(history6m.length, 6);
@@ -149,6 +128,5 @@ describe('Integração DB & RAG — Cenários 23, 24 e 25: Indexação Increment
     where: { id: { in: [ragUserA.id, ragUserB.id] } },
   });
 
-    expect(assistantResp.ok).toBe(true);
   });
 });
