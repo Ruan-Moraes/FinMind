@@ -33,8 +33,8 @@ test.describe('E2E: Select Pesquisável Global & Simulador de Metas Juntas', () 
 
     if ((await combinedHeading.count()) === 0) {
       await page.getByRole('button', { name: /Definir Meta de Carteira/i }).click();
-      await page.locator('#form-portfolio-goal input[placeholder*="Reserva"]').fill(tempGoalTitle);
-      await page.locator('#form-portfolio-goal input[inputmode="decimal"]').fill('10000,00');
+      await page.locator('[data-agent-id="modal.goal.input.title"]').fill(tempGoalTitle);
+      await page.locator('[data-agent-id="modal.goal.input.targetAmount"]').fill('10000,00');
       await page.getByRole('button', { name: /Salvar Meta/i }).click();
       createdTempGoal = true;
     }

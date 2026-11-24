@@ -8,7 +8,7 @@ test.describe('E2E: Aba Previsão de Valor e Verificação de Meta por Data', ()
 
     // 1. Abrir aba Previsão de Valor
     await page.getByRole('button', { name: /Previsão de Valor/i }).click();
-    await expect(page.getByText('Metas de Saldo por Data (Verificação no Dia)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Metas de Saldo por Data' })).toBeVisible();
     await expect(page.getByText('Previsões de Ganhos & Gastos')).toBeVisible();
 
     const suffix = Date.now().toString().slice(-4);
