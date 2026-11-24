@@ -31,7 +31,10 @@ import {
   guideWorkflowToolSchema,
   navigateToolSchema,
 } from '@/features/ai-agent/tools/tool-catalog';
+import { buildScreenshotArgsForTab } from '@/features/ai-agent/services/agent-screenshot-presets';
 import { getMutationToolExecutor } from '@/features/ai-agent/tools/tool-dispatcher';
+import { isKnownAgentTargetId } from '@/features/ai-agent/domain/agent-target-registry';
+import { resolveCategory } from '@/features/ai-agent/tools/entity-resolvers';
 
 export interface ComposeAgentTurnParams {
   userId: string;
@@ -96,7 +99,7 @@ export async function composeAgentTurnFromTools(
       if (!check.success) continue;
       hasNavigationOrFilter = true;
       visualSteps.push({ id: `nav-${visualSteps.length + 1}`, action: 'SWITCH_TAB', tab: check.data.tab as ActiveTab, targetId: `nav.tab.${check.data.tab}`, caption: 'Navegando para a aba solicitada' });
-      if (check.data.targetId) visualSteps.push({ id: `nav-hi-${visualSteps.length + 1}`, action: 'HIGHLIGHT', targetId: check.data.targetId, caption: 'Elemento localizado', pauseMs: 650 });
+      if (check.data.targetId && isKnownAgentTargetId(check.data.targetId)) visualSteps.push({ id: `nav-hi-${visualSteps.length + 1}`, action: 'HIGHLIGHT', targetId: check.data.targetId, caption: 'Elemento localizado', pauseMs: 650 });
       narratives.push('Abrindo a tela solicitada para você.');
       continue;
     }
@@ -112,7 +115,11 @@ export async function composeAgentTurnFromTools(
       const check = guideWorkflowToolSchema.safeParse(selectedTool.args);
       if (!check.success) continue;
       dryRunGuide = true;
-      visualSteps.push(...buildGuideSteps(check.data));
+      const guideArgs =
+        check.data.highlightTargetId && !isKnownAgentTargetId(check.data.highlightTargetId)
+          ? { ...check.data, highlightTargetId: undefined }
+          : check.data;
+      visualSteps.push(...buildGuideSteps(guideArgs));
       narratives.push(`Vou demonstrar na tela como **${check.data.topic}** passo a passo.${topSectionPath ? ` Referência: *${topSectionPath}*.` : ''}`);
       continue;
     }
@@ -121,7 +128,11 @@ export async function composeAgentTurnFromTools(
       const check = captureScreenToolSchema.safeParse(selectedTool.args);
       if (!check.success) continue;
       dryRunGuide = true;
-      screenshotDirective = buildScreenshotDirective(check.data);
+      const knownAnnotations = check.data.annotations.filter((a) => isKnownAgentTargetId(a.targetId));
+      screenshotDirective = buildScreenshotDirective({
+        ...check.data,
+        annotations: knownAnnotations.length > 0 ? knownAnnotations : (buildScreenshotArgsForTab(check.data.tab).annotations as Array<{ targetId: string; label: string }>),
+      });
       narratives.push(`Capturando a interface real de **${check.data.title}** com marcações numeradas.`);
       continue;
     }
@@ -130,9 +141,19 @@ export async function composeAgentTurnFromTools(
       const check = applyTxFiltersToolSchema.safeParse(selectedTool.args);
       if (!check.success) continue;
       hasNavigationOrFilter = true;
+      const { categoryName, ...filterPayload } = check.data;
+      let filterCategoryId: string | undefined;
+      if (categoryName) {
+        try {
+          const cat = await resolveCategory(userId, categoryName);
+          filterCategoryId = cat.id;
+        } catch (err) {
+          narratives.push(err instanceof Error ? err.message : `Categoria "${categoryName}" não encontrada.`);
+        }
+      }
       visualSteps.push(
         { id: `f-tab-${visualSteps.length + 1}`, action: 'SWITCH_TAB', tab: 'transactions', targetId: 'nav.tab.transactions', caption: 'Abrindo Extrato & Comprovantes' },
-        { id: `f-set-${visualSteps.length + 2}`, action: 'SET_TX_FILTERS', targetId: 'transactions.filter.search', modalPayload: check.data, caption: 'Aplicando filtros solicitados' },
+        { id: `f-set-${visualSteps.length + 2}`, action: 'SET_TX_FILTERS', targetId: 'transactions.filter.search', modalPayload: { ...filterPayload, ...(filterCategoryId ? { filterCategoryId } : {}) }, caption: 'Aplicando filtros solicitados' },
         { id: `f-hi-${visualSteps.length + 3}`, action: 'HIGHLIGHT', targetId: 'transactions.table', caption: 'Resultados filtrados no extrato', pauseMs: 450 }
       );
       narratives.push('Aplicando os filtros solicitados no **Extrato & Comprovantes**.');

@@ -98,9 +98,12 @@ describe('Agente IA Autônomo — Core (Chunker, Política de Risco, Roteamento 
     expect(screenshot?.name).toBe('capture_annotated_screen');
     expect(screenshot?.args.tab).toBe('goals');
 
-    const goal = detectDeterministicToolCall('Altere minha meta financeira para R$ 2.000', SAMPLE_UI_STATE);
+    const goal = detectDeterministicToolCall('Crie uma meta de reserva para R$ 2.000', SAMPLE_UI_STATE);
     expect(goal?.name).toBe('upsert_portfolio_goal');
     expect(goal?.args.targetAmountBRL).toBe(2000);
+
+    // Edição NÃO é determinística: depende de saber qual meta (evita editar/criar a meta errada).
+    expect(detectDeterministicToolCall('Altere minha meta financeira para R$ 2.000', SAMPLE_UI_STATE)).toBeNull();
 
     const prefs = detectDeterministicToolCall('Configure meu estado para MG e cidade Belo Horizonte', SAMPLE_UI_STATE);
     expect(prefs?.name).toBe('update_user_preferences');

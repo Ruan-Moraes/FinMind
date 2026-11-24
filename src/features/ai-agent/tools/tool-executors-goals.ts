@@ -24,6 +24,12 @@ export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
       existing = goals.find((g) => g.title.toLowerCase().includes(matchNeedle)) || null;
     }
 
+    if (!existing && (parsed.goalId || matchNeedle)) {
+      throw new Error(
+        `Não encontrei a meta "${parsed.matchTitle || parsed.goalId}" para alterar. Diga o nome exato da meta (ou peça para criar uma nova).`
+      );
+    }
+
     const isUpdate = Boolean(existing);
     const effectiveTitle = isUpdate && parsed.title === 'Meta Financeira' ? existing!.title : parsed.title;
     const monthLabel = `${MONTH_NAMES_PT[parsed.targetMonth - 1]}/${parsed.targetYear}`;

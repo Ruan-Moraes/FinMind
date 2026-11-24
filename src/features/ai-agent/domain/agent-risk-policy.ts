@@ -7,6 +7,10 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
   query_expenses_and_transactions: 'L0',
   compare_financial_periods: 'L0',
   query_forecasts_and_simulations: 'L0',
+  query_budgets: 'L0',
+  query_static_rules: 'L0',
+  query_credit_card_invoices: 'L0',
+  query_categories: 'L0',
   search_financial_history: 'L0',
   generate_financial_report: 'L0',
   render_visual_content: 'L0',
@@ -17,7 +21,6 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
 
   // L1: Estado visual / filtros / período
   change_period: 'L1',
-  change_comparison_periods: 'L1',
   apply_transaction_filters: 'L1',
 
   // L2: Criação / Edição persistente (requer confirmação Antes -> Depois, reversível)
@@ -35,12 +38,12 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
   pay_credit_card_invoice: 'L2',
   create_transaction: 'L2',
   update_transaction: 'L2',
-  sync_holidays: 'L2',
-  generate_health_report: 'L2',
+  set_static_rule_month: 'L2',
 
   // L3: Exclusões (confirmação explícita obrigatória)
   delete_portfolio_goal: 'L3',
   delete_static_rule: 'L3',
+  delete_budget: 'L3',
   delete_transaction: 'L3',
   delete_value_forecast: 'L3',
 

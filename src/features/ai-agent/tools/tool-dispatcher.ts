@@ -3,14 +3,27 @@ import {
   deletePortfolioGoalExecutor,
   upsertPortfolioGoalExecutor,
 } from '@/features/ai-agent/tools/tool-executors-goals';
-import {
-  upsertStaticRuleExecutor,
-  upsertValueForecastExecutor,
-} from '@/features/ai-agent/tools/tool-executors-rules-forecast';
+import { upsertValueForecastExecutor } from '@/features/ai-agent/tools/tool-executors-rules-forecast';
+import { updateUserPreferencesExecutor } from '@/features/ai-agent/tools/tool-executors-finance';
 import {
   createTransactionExecutor,
-  updateUserPreferencesExecutor,
-} from '@/features/ai-agent/tools/tool-executors-finance';
+  deleteTransactionExecutor,
+  updateTransactionExecutor,
+} from '@/features/ai-agent/tools/tool-executors-transactions';
+import {
+  deleteBudgetExecutor,
+  deleteStaticRuleExecutor,
+  deleteValueForecastExecutor,
+  setStaticRuleMonthExecutor,
+  upsertBalanceTargetExecutor,
+  upsertBudgetExecutor,
+  upsertStaticRuleExecutor,
+} from '@/features/ai-agent/tools/tool-executors-planning';
+import {
+  payCreditCardInvoiceExecutor,
+  upsertAccountExecutor,
+  upsertCreditCardExecutor,
+} from '@/features/ai-agent/tools/tool-executors-accounts';
 import {
   categorizeTransactionsExecutor,
   upsertCategoryExecutor,
@@ -26,6 +39,17 @@ const SINGLE_MUTATION_EXECUTORS: Record<string, AgentToolExecutor> = {
   update_user_preferences: updateUserPreferencesExecutor,
   upsert_category: upsertCategoryExecutor,
   categorize_transactions: categorizeTransactionsExecutor,
+  update_transaction: updateTransactionExecutor,
+  delete_transaction: deleteTransactionExecutor,
+  delete_static_rule: deleteStaticRuleExecutor,
+  set_static_rule_month: setStaticRuleMonthExecutor,
+  upsert_budget: upsertBudgetExecutor,
+  delete_budget: deleteBudgetExecutor,
+  delete_value_forecast: deleteValueForecastExecutor,
+  upsert_balance_target: upsertBalanceTargetExecutor,
+  upsert_account: upsertAccountExecutor,
+  upsert_credit_card: upsertCreditCardExecutor,
+  pay_credit_card_invoice: payCreditCardInvoiceExecutor,
 };
 
 const batchMutationsExecutor = createBatchMutationsExecutor(

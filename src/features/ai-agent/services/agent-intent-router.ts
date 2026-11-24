@@ -94,6 +94,9 @@ export function detectDeterministicToolCall(
     if (/\bcategoria[s]?\b/.test(norm)) {
       return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: 'Configurar Categorias de Gastos e Ganhos', highlightTargetId: 'goals.section.categories', openModalType: 'CATEGORY' } };
     }
+    if (/\bmeta[s]? de saldo\b/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'forecast', topic: 'Definir Meta de Saldo por Data', highlightTargetId: 'forecast.btn.addTarget' } };
+    }
     if (/\b(meta[s]?|patrimonio|carteira)/.test(norm)) {
       return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: 'Cadastrar uma nova Meta de Carteira', highlightTargetId: 'goals.btn.create', openModalType: 'GOAL' } };
     }
@@ -121,15 +124,18 @@ export function detectDeterministicToolCall(
     }
   }
 
-  if (/\b(alter|mud|atualiz|defin|cri|cadastr)[a-z]*\b.*\b(meta[s]?)/.test(norm)) {
+  // Somente CRIAÇÃO é determinística: editar exige saber QUAL meta, o que depende do modelo (que consulta as metas).
+  if (
+    /\b(cri|cadastr|defin|nova)[a-z]*\b.*\bmeta[s]?\b/.test(norm) &&
+    !/\b(alter|mud|atualiz|edit|ajust)[a-z]*\b/.test(norm) &&
+    !/\bmeta[s]? de saldo\b/.test(norm)
+  ) {
     const amount = parseBrlAmount(message);
     if (amount) {
-      const isEdit = /\b(alter|mud|atualiz)/.test(norm);
       return {
         name: 'upsert_portfolio_goal',
         args: {
-          ...(isEdit ? { matchTitle: '' } : {}),
-          title: isEdit ? 'Meta Financeira' : 'Nova Meta de Carteira',
+          title: 'Nova Meta de Carteira',
           targetAmountBRL: amount,
           targetMonth: uiState.selectedMonth,
           targetYear: uiState.selectedYear,

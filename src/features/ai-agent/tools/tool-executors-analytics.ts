@@ -17,6 +17,8 @@ import {
   queryGoalsToolSchema,
   queryOverviewToolSchema,
 } from '@/features/ai-agent/tools/tool-catalog-analytics';
+import { executeExtendedReadTool } from '@/features/ai-agent/tools/tool-executors-extended-reads';
+import { EXTENDED_READ_TOOL_NAMES } from '@/features/ai-agent/tools/tool-catalog-extended';
 import {
   executeForecastsTool,
   executeGenerateReportTool,
@@ -197,6 +199,7 @@ export async function executeReadAnalyticsTool(
     };
   }
 
+  if (EXTENDED_READ_TOOL_NAMES.has(toolName)) return executeExtendedReadTool(toolName, rawArgs, ctx);
   if (toolName === 'query_forecasts_and_simulations') return executeForecastsTool(rawArgs, ctx);
   if (toolName === 'search_financial_history') return executeSearchHistoryTool(rawArgs, ctx);
   if (toolName === 'generate_financial_report') return executeGenerateReportTool(rawArgs, ctx);

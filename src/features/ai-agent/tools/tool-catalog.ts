@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ProviderToolDeclaration } from '@/features/ai-agent/services/agent-tool-provider-client';
 import { ANALYTICS_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog-analytics';
 import { CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog-mutations';
+import { EXTENDED_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog-extended';
 
 const TAB_ENUM = ['overview', 'ai', 'comparison', 'goals', 'forecast', 'accounts', 'transactions'] as const;
 
@@ -21,6 +22,7 @@ export const applyTxFiltersToolSchema = z.object({
   searchQuery: z.string().optional(),
   filterType: z.enum(['ALL', 'INCOME', 'EXPENSE', 'TRANSFER']).optional(),
   filterNature: z.enum(['ALL', 'STATIC', 'VARIABLE']).optional(),
+  categoryName: z.string().optional(),
 });
 export const changePeriodToolSchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
@@ -36,12 +38,18 @@ export const upsertStaticRuleToolSchema = z.object({
   description: z.string().trim().min(1), type: z.enum(['INCOME', 'EXPENSE']), amountBRL: z.coerce.number().positive(),
   dayOfMonth: z.coerce.number().int().min(1).max(31).default(5),
   dayType: z.enum(['CALENDAR_DAY', 'BUSINESS_DAY']).default('CALENDAR_DAY'), includeSaturday: z.boolean().default(false),
+  matchDescription: z.string().trim().optional(), categoryName: z.string().optional(), accountName: z.string().optional(),
+}).refine((v) => v.dayType !== 'BUSINESS_DAY' || v.dayOfMonth <= 23, {
+  message: 'Para dia útil, o limite é do 1º ao 23º dia útil do mês.', path: ['dayOfMonth'],
 });
 export const createTransactionToolSchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']), nature: z.enum(['STATIC', 'VARIABLE']).default('VARIABLE'),
   description: z.string().trim().min(1), amountBRL: z.coerce.number().positive(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), categoryName: z.string().optional(), accountName: z.string().optional(),
+  destinationAccountName: z.string().optional(), cardName: z.string().optional(),
+  installments: z.coerce.number().int().min(1).max(48).default(1),
   status: z.enum(['COMPLETED', 'PENDING']).default('COMPLETED'),
+  tags: z.string().optional(),
 });
 export const upsertValueForecastToolSchema = z.object({
   title: z.string().trim().min(1), type: z.enum(['INCOME', 'EXPENSE']), amountBRL: z.coerce.number().positive(),
@@ -127,6 +135,7 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
         searchQuery: { type: 'string' },
         filterType: { type: 'string', enum: ['ALL', 'INCOME', 'EXPENSE', 'TRANSFER'] },
         filterNature: { type: 'string', enum: ['ALL', 'STATIC', 'VARIABLE'] },
+        categoryName: { type: 'string', description: 'Nome da categoria para filtrar o extrato.' },
       },
     },
   },
@@ -168,10 +177,14 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   },
   {
     name: 'upsert_static_rule',
-    description: 'Cria um Custo Estático ou Ganho Estático mensal (suporta Dia Fixo ou Dia Útil).',
+    description:
+      'Cria um Custo/Ganho Estático mensal (Dia Fixo 1-31 ou Dia Útil 1-23) OU edita uma regra existente informando matchDescription (parte da descrição atual). Sem matchDescription, sempre cria uma regra nova.',
     parameters: {
       type: 'object',
       properties: {
+        matchDescription: { type: 'string', description: 'Parte da descrição da regra existente a editar. Omita para criar nova.' },
+        categoryName: { type: 'string' },
+        accountName: { type: 'string' },
         description: { type: 'string' },
         type: { type: 'string', enum: ['INCOME', 'EXPENSE'] },
         amountBRL: { type: 'number' },
@@ -184,17 +197,23 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   },
   {
     name: 'create_transaction',
-    description: 'Registra um novo lançamento financeiro (Receita ou Despesa) após confirmação.',
+    description:
+      'Registra um lançamento (Receita, Despesa ou Transferência) após confirmação. Despesa no cartão: informe cardName (e installments 1-48). Transferência: informe accountName (origem) e destinationAccountName. Se a conta/categoria informada não existir, a operação é recusada com a lista de opções.',
     parameters: {
       type: 'object',
       properties: {
         type: { type: 'string', enum: ['INCOME', 'EXPENSE', 'TRANSFER'] },
         nature: { type: 'string', enum: ['STATIC', 'VARIABLE'] },
         description: { type: 'string' },
-        amountBRL: { type: 'number' },
+        amountBRL: { type: 'number', description: 'Valor total em Reais (ex: 89.9). Em parcelado, é o valor total da compra.' },
         date: { type: 'string', description: 'YYYY-MM-DD' },
         categoryName: { type: 'string' },
-        accountName: { type: 'string' },
+        accountName: { type: 'string', description: 'Conta de origem/pagamento.' },
+        destinationAccountName: { type: 'string', description: 'Somente TRANSFER.' },
+        cardName: { type: 'string', description: 'Cartão de crédito (somente EXPENSE).' },
+        installments: { type: 'integer', description: 'Parcelas de 1 a 48 (somente com cartão).' },
+        status: { type: 'string', enum: ['COMPLETED', 'PENDING'] },
+        tags: { type: 'string' },
       },
       required: ['type', 'description', 'amountBRL', 'date'],
     },
@@ -235,4 +254,5 @@ export const AGENT_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   ...ANALYTICS_TOOL_DECLARATIONS,
   ...UI_AND_MUTATION_TOOL_DECLARATIONS,
   ...CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS,
+  ...EXTENDED_TOOL_DECLARATIONS,
 ];

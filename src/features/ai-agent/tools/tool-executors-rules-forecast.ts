@@ -1,79 +1,9 @@
 import { prisma } from '@/shared/lib/prisma';
 import { formatCentsToBRL } from '@/shared/lib/currency';
-import {
-  upsertStaticRuleToolSchema,
-  upsertValueForecastToolSchema,
-} from '@/features/ai-agent/tools/tool-catalog';
+import { upsertValueForecastToolSchema } from '@/features/ai-agent/tools/tool-catalog';
 import type { AgentToolExecutor } from '@/features/ai-agent/tools/tool-executor-types';
 
 const brlToCents = (val: number) => Math.round(val * 100);
-
-export const upsertStaticRuleExecutor: AgentToolExecutor = {
-  async preparePreview(_userId, rawArgs) {
-    const parsed = upsertStaticRuleToolSchema.parse(rawArgs);
-    const cents = brlToCents(parsed.amountBRL);
-    const isIncome = parsed.type === 'INCOME';
-    const dayLabel =
-      parsed.dayType === 'BUSINESS_DAY' ? `${parsed.dayOfMonth}º dia útil` : `Dia ${parsed.dayOfMonth}`;
-    return {
-      title: isIncome ? `Novo Ganho Estático: ${parsed.description}` : `Novo Custo Estático: ${parsed.description}`,
-      summary: `Cadastrar ${isIncome ? 'ganho fixo' : 'custo fixo'} "${parsed.description}" de ${formatCentsToBRL(cents)} (${dayLabel}).`,
-      beforePreview: [{ label: 'Linha de base fixa', value: 'Nova regra mensal' }],
-      afterPreview: [
-        { label: 'Descrição', value: parsed.description },
-        { label: 'Valor', value: formatCentsToBRL(cents) },
-        { label: 'Vencimento', value: dayLabel },
-      ],
-      beforeState: { action: 'CREATE' },
-      normalizedParams: parsed,
-      postConfirmVisualSteps: [
-        { id: 's1', action: 'SWITCH_TAB', tab: 'goals', targetId: 'nav.tab.goals', caption: 'Navegando para Custos & Ganhos Estáticos' },
-        {
-          id: 's2',
-          action: 'SCROLL_TO',
-          targetId: 'goals.table.staticRules',
-          caption: `Salvando regra "${parsed.description}"`,
-          tooltipTitle: isIncome ? 'Novo Ganho Estático' : 'Novo Custo Estático',
-          tooltipBody: `Registrando "${parsed.description}" (${formatCentsToBRL(cents)} • ${dayLabel}) na tabela de Regras Fixas Mensais.`,
-          tone: 'emerald',
-          pauseMs: 650,
-        },
-      ],
-      reversible: true,
-    };
-  },
-  async executeAndVerify(userId, params) {
-    const parsed = upsertStaticRuleToolSchema.parse(params);
-    const cents = brlToCents(parsed.amountBRL);
-    const created = await prisma.recurrenceRule.create({
-      data: {
-        userId,
-        description: parsed.description,
-        type: parsed.type,
-        nature: 'STATIC',
-        amountInCents: cents,
-        dayOfMonth: parsed.dayOfMonth,
-        dayType: parsed.dayType,
-        includeSaturday: parsed.includeSaturday,
-      },
-    });
-    const verified = Boolean(await prisma.recurrenceRule.findFirst({ where: { id: created.id, userId } }));
-    return {
-      ok: verified,
-      verified,
-      summary: verified
-        ? `Regra fixa "${created.description}" (${formatCentsToBRL(cents)}) salva e verificada no banco.`
-        : 'Não foi possível confirmar a criação da regra fixa.',
-      afterState: created,
-    };
-  },
-  async rollback(userId, _beforeState, afterState) {
-    const after = afterState as { id?: string } | null;
-    if (!after?.id) return { ok: false, summary: 'Regra não encontrada para desfazer.' };
-    await prisma.recurrenceRule.deleteMany({ where: { id: after.id, userId } });
-    return { ok: true, summary: 'Regra fixa recém-criada removida (ação desfeita).' };
-  },
-};
 
 export const upsertValueForecastExecutor: AgentToolExecutor = {
   async preparePreview(_userId, rawArgs) {

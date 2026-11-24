@@ -76,6 +76,7 @@ export async function createTransactionForUser(userId: string, raw: unknown) {
           ).id
         : undefined;
 
+    const createdIds: string[] = [];
     for (let i = 0; i < parcels.length; i++) {
       const parcel = parcels[i];
       const invoice = await prisma.creditCardInvoice.upsert({
@@ -117,13 +118,14 @@ export async function createTransactionForUser(userId: string, raw: unknown) {
         },
       });
 
+      createdIds.push(createdTx.id);
       if (i === 0 && payload.attachment) {
         await prisma.attachment.create({ data: { transactionId: createdTx.id, ...payload.attachment } });
       }
     }
 
     await syncKnowledgeSafe(userId);
-    return { ok: true as const };
+    return { ok: true as const, createdIds, installmentGroupId: installmentGroupId ?? null };
   }
 
   const createdTx = await prisma.transaction.create({
@@ -155,5 +157,5 @@ export async function createTransactionForUser(userId: string, raw: unknown) {
   }
 
   await syncKnowledgeSafe(userId);
-  return { ok: true as const };
+  return { ok: true as const, createdIds: [createdTx.id], installmentGroupId: null };
 }
