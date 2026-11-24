@@ -1,9 +1,9 @@
 ---
 docId: goals-and-static-rules
 module: goals
-version: 1.1.0
+version: 1.2.0
 screens: ["goals", "modal:GOAL", "modal:STATIC_RULE", "modal:BUDGET", "modal:CATEGORY"]
-relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule"]
+relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "upsert_category", "categorize_transactions"]
 tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo estatico", "ganho estatico", "dia util", "orcamento", "limite de gasto", "categoria", "categorias de gastos"]
 ---
 

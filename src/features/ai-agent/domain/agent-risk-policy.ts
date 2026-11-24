@@ -26,6 +26,8 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
   upsert_static_rule: 'L2',
   upsert_budget: 'L2',
   upsert_category: 'L2',
+  categorize_transactions: 'L2',
+  batch_mutations: 'L2',
   upsert_value_forecast: 'L2',
   upsert_balance_target: 'L2',
   upsert_account: 'L2',

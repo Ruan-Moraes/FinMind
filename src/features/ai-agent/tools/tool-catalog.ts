@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ProviderToolDeclaration } from '@/features/ai-agent/services/agent-tool-provider-client';
 import { ANALYTICS_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog-analytics';
+import { CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog-mutations';
 
 const TAB_ENUM = ['overview', 'ai', 'comparison', 'goals', 'forecast', 'accounts', 'transactions'] as const;
 
@@ -233,4 +234,5 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
 export const AGENT_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   ...ANALYTICS_TOOL_DECLARATIONS,
   ...UI_AND_MUTATION_TOOL_DECLARATIONS,
+  ...CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS,
 ];

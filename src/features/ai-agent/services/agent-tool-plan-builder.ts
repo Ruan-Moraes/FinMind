@@ -16,9 +16,9 @@ import type {
 } from '@/features/ai-agent/domain/agent-types';
 import type { DynamicContentBlock } from '@/features/ai-agent/domain/dynamic-content-schemas';
 import {
-  createAgentAuditLog,
-  generateIdempotencyKey,
-} from '@/features/ai-agent/services/agent-audit-service';
+  buildPendingMutationFromPrepared,
+  type PreparedMutationEntry,
+} from '@/features/ai-agent/services/agent-batch-mutation-builder';
 import type { ProviderToolCallResult } from '@/features/ai-agent/services/agent-tool-provider-client';
 import {
   buildGuideSteps,
@@ -73,6 +73,7 @@ export async function composeAgentTurnFromTools(
   const visualSteps: AgentVisualStep[] = [];
   const narratives: string[] = [];
   let dryRunGuide = false;
+  const preparedMutations: PreparedMutationEntry[] = [];
   let pendingMutation: PendingAgentMutation | null = null;
   let screenshotDirective: ScreenshotCaptureDirective | null = null;
   let hasNavigationOrFilter = false;
@@ -148,59 +149,37 @@ export async function composeAgentTurnFromTools(
     }
 
     const executor = getMutationToolExecutor(selectedTool.name);
-    if (executor && requiresExplicitConfirmation(risk) && !pendingMutation) {
-      let preview;
+    if (executor && requiresExplicitConfirmation(risk)) {
       try {
-        preview = await executor.preparePreview(userId, selectedTool.args);
-      } catch {
+        const preview = await executor.preparePreview(userId, selectedTool.args);
+        preparedMutations.push({ toolName: selectedTool.name, risk, preview });
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : null;
         narratives.push(
-          `Faltaram parâmetros válidos para preparar "${selectedTool.name}". Informe os dados completos (ex.: título e valor) para eu preparar a operação.`
+          reason ||
+            `Faltaram parâmetros válidos para preparar "${selectedTool.name}". Informe os dados completos para eu preparar a operação.`
         );
-        continue;
       }
+    }
+  }
 
-      const idempotencyKey = generateIdempotencyKey(runId, selectedTool.name);
-      const auditLog = await createAgentAuditLog({
-        userId,
-        sessionId,
-        runId,
-        idempotencyKey,
-        modality: visualSteps.length > 0 || contentBlocks.length > 0 ? 'HYBRID' : 'AUTONOMOUS',
-        toolName: selectedTool.name,
-        riskLevel: risk,
-        status: 'AWAITING_CONFIRMATION',
-        rawParams: preview.normalizedParams,
-        beforeState: preview.beforeState,
-      });
-
-      pendingMutation = {
-        auditLogId: auditLog.id,
-        runId,
-        idempotencyKey,
-        toolName: selectedTool.name,
-        riskLevel: risk,
-        title: preview.title,
-        summary: preview.summary,
-        beforePreview: preview.beforePreview,
-        afterPreview: preview.afterPreview,
-        params: preview.normalizedParams,
-        postConfirmVisualSteps: preview.postConfirmVisualSteps,
-        reversible: preview.reversible,
-      };
-
-      // Modo GUIDED nunca distorce a intenção: apresenta os passos guiados E mantém o cartão de confirmação
-      if (interactionMode === 'GUIDED' && visualSteps.length === 0) {
-        visualSteps.push(
-          ...preview.postConfirmVisualSteps
-            .filter((s) => s.action !== 'CLOSE_MODAL')
-            .map((s) => ({ ...s, persistCoachmark: Boolean(s.tooltipBody) }))
-        );
-        dryRunGuide = true;
-      }
-
-      narratives.push(
-        `Preparei **${preview.title}**. Revise o resumo abaixo e clique em **Confirmar e Executar** para aplicar e verificar a gravação no banco.`
+  if (preparedMutations.length > 0) {
+    const built = await buildPendingMutationFromPrepared({
+      userId,
+      sessionId,
+      runId,
+      modality: visualSteps.length > 0 || contentBlocks.length > 0 ? 'HYBRID' : 'AUTONOMOUS',
+      prepared: preparedMutations,
+    });
+    pendingMutation = built.pendingMutation;
+    narratives.push(built.narrative);
+    if (interactionMode === 'GUIDED' && visualSteps.length === 0) {
+      visualSteps.push(
+        ...pendingMutation.postConfirmVisualSteps
+          .filter((s) => s.action !== 'CLOSE_MODAL')
+          .map((s) => ({ ...s, persistCoachmark: Boolean(s.tooltipBody) }))
       );
+      dryRunGuide = true;
     }
   }
 
