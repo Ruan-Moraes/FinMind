@@ -15,6 +15,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  authOwner       AuthOwner?
+  authSessions    AuthSession[]
   settings        UserSettings?
   accounts        Account[]
   creditCards     CreditCard[]
@@ -33,6 +35,29 @@ model User {
   aiChatSessions      AiChatSession[]
   holidays            Holiday[]
   agentAuditLogs      AgentActionAuditLog[]
+}
+
+model AuthOwner {
+  id     Int    @id
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+}
+
+model AuthSession {
+  tokenHash String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+
+  @@index([userId, expiresAt])
+}
+
+model AuthAttempt {
+  key       String   @id
+  attempts  Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 model UserSettings {

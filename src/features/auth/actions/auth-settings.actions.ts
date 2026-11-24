@@ -1,19 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
-import {
-  isPublicAuthRequired,
-  isStrongAdminPassword,
-  requirePublicAuthSecret,
-} from '@/features/auth/domain/access-policy';
-import {
-  createSessionCookie,
-  clearSessionCookie,
-  ensurePersonalUserInitialized,
-  requireAuthenticatedUser,
-} from '@/features/auth';
+import { clearSessionCookie, requireAuthenticatedUser } from '@/features/auth';
 import {
   resetAllFinancialDataForUser,
   type ResetDataScope,
@@ -22,30 +11,6 @@ import {
   extractFirstZodError,
   userSettingsSchema,
 } from '@/features/planning/schemas/finance-schemas';
-
-export async function loginAction(formData: FormData) {
-  const email = String(formData.get('email') || '').toLowerCase().trim();
-  const password = String(formData.get('password') || '');
-
-  const invalidCredentials = { ok: false, error: 'E-mail ou senha incorretos.' };
-  if (isPublicAuthRequired()) {
-    requirePublicAuthSecret();
-    if (!isStrongAdminPassword(password)) return invalidCredentials;
-  }
-
-  const user = await ensurePersonalUserInitialized();
-  const validPassword = await bcrypt.compare(password, user.passwordHash);
-  if (!validPassword || email !== user.email) return invalidCredentials;
-
-  await createSessionCookie({
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-  });
-
-  revalidatePath('/');
-  return { ok: true as const };
-}
 
 export async function logoutAction() {
   await clearSessionCookie();

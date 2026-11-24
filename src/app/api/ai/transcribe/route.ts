@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { rejectCrossOriginWrite } from '@/shared/lib/request-origin';
 import { requireAuthenticatedUser } from '@/features/auth';
 import { resolveUserProviderCredentials } from '@/features/ai-copilot/services/ai-credentials-service';
 
@@ -77,6 +78,9 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ ok: false, error: 'Autenticação obrigatória.' }, { status: 401 });
   }
+
+  const blockedOrigin = rejectCrossOriginWrite(request);
+  if (blockedOrigin) return blockedOrigin;
 
   let formData: FormData;
   try {

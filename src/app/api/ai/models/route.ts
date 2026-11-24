@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rejectCrossOriginWrite } from '@/shared/lib/request-origin';
 import { requireAuthenticatedUser } from '@/features/auth';
 import type { AiProviderId } from '@/features/ai-copilot/domain/ai-provider-types';
 import { resolveUserProviderCredentials } from '@/features/ai-copilot/services/ai-credentials-service';
@@ -68,6 +69,9 @@ export async function POST(req: NextRequest) {
   let provider: AiProviderId = 'OPENAI';
   try {
     const user = await requireAuthenticatedUser();
+    const blockedOrigin = rejectCrossOriginWrite(req);
+    if (blockedOrigin) return blockedOrigin;
+
     const body = (await req.json().catch(() => ({}))) as { provider?: string; apiKey?: string };
     provider = parseProvider(body.provider);
     const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';

@@ -34,6 +34,9 @@ function isPrismaClientCurrent(client: PrismaClient | undefined): client is Pris
     delegates.systemKnowledgeDocument &&
       delegates.systemKnowledgeChunk &&
       delegates.agentActionAuditLog &&
+      delegates.authOwner &&
+      delegates.authSession &&
+      delegates.authAttempt &&
       delegates.holiday
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { findSessionUser } from '@/features/auth/services/user-bootstrap';
 import './globals.css';
 import {
   ensurePersonalUserInitialized,
@@ -25,12 +26,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   // Lê o tema salvo no banco no servidor para evitar flicker (DESIGN_SYSTEM.md Seção 6)
-  let savedTheme = 'DARK';
-  const session = await getSession();
-  if (!isPublicAuthRequired() || session?.userId) {
-    const user = await ensurePersonalUserInitialized();
-    savedTheme = user.settings?.theme || 'DARK';
-  }
+  const user = isPublicAuthRequired()
+    ? await findSessionUser(await getSession())
+    : await ensurePersonalUserInitialized();
+  const savedTheme = user?.settings?.theme || 'DARK';
   const isDark = savedTheme === 'DARK' || savedTheme === 'SYSTEM';
 
   return (

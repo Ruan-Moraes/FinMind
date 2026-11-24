@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
 import { getSession, isSessionExplicitlyLoggedOut } from '@/features/auth/services/session-cookies';
-import { isPublicAuthRequired, isStrongAdminPassword } from '@/features/auth/domain/access-policy';
+import { isPublicAuthRequired } from '@/features/auth/domain/access-policy';
 import type { SessionPayload } from '@/features/auth/domain/jwt-session';
 import { decryptSecret } from '@/features/auth/domain/secret-crypto';
 
@@ -33,12 +33,10 @@ function withDecryptedSettings<
  * Inicializa a estrutura base do usuário e higieniza eventuais configurações legadas/simuladas.
  */
 export async function ensurePersonalUserInitialized() {
-  const publicAuth = isPublicAuthRequired();
-  const configuredEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  if (publicAuth && (!configuredEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuredEmail))) {
-    throw new Error('Configure ADMIN_EMAIL para a conta do FinMind.');
+  if (isPublicAuthRequired()) {
+    throw new Error('A inicialização automática está disponível apenas no ambiente local.');
   }
-  const adminEmail = configuredEmail || 'admin@finmind.app';
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() || 'admin@finmind.app';
   const adminName = process.env.ADMIN_NAME || 'Administrador FinMind';
 
   let user = await prisma.user.findUnique({
@@ -47,10 +45,7 @@ export async function ensurePersonalUserInitialized() {
   });
 
   if (!user) {
-    const adminPass = process.env.ADMIN_PASSWORD || (publicAuth ? '' : 'admin123');
-    if (publicAuth && !isStrongAdminPassword(adminPass)) {
-      throw new Error('Configure ADMIN_PASSWORD com uma senha de pelo menos 16 caracteres e até 72 bytes.');
-    }
+    const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
     const passwordHash = await bcrypt.hash(adminPass, 10);
     try {
       user = await prisma.user.create({
@@ -141,7 +136,6 @@ export async function findSessionUser(session: SessionPayload | null) {
  * Resolve o usuário autenticado da sessão ativa e bloqueia acesso após logout.
  */
 export async function requireAuthenticatedUser() {
-
   const loggedOut = await isSessionExplicitlyLoggedOut();
   if (loggedOut) {
     throw new Error('Sessão encerrada. Faça login novamente para acessar seus dados financeiros.');

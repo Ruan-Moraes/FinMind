@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rejectCrossOriginWrite } from '@/shared/lib/request-origin';
 import { revalidatePath } from 'next/cache';
 import { requireAuthenticatedUser } from '@/features/auth';
 import { prisma } from '@/shared/lib/prisma';
@@ -51,13 +52,16 @@ export async function handleSanityCheckGet(req: NextRequest) {
  */
 export async function handleSanityCheckPost(req: NextRequest) {
   try {
+    const user = await requireAuthenticatedUser();
+    const blockedOrigin = rejectCrossOriginWrite(req);
+    if (blockedOrigin) return blockedOrigin;
+
     const body = (await req.json().catch(() => ({}))) as {
       provider?: string;
       modelId?: string;
       persistSelection?: boolean;
       customPrompt?: string;
     };
-    const user = await requireAuthenticatedUser();
     const bundle = await resolveUserProviderCredentials(user.id);
     const explicitProvider = parseProvider(body.provider);
     const targetModelId = String(body.modelId || bundle.activeModelId || '').trim();

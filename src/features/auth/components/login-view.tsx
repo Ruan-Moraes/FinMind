@@ -1,101 +1,107 @@
 'use client';
 
-import * as React from 'react';
+import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Lock, ShieldCheck } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { FormField, Input } from '@/shared/ui/input';
-import { loginAction } from '@/features/auth/actions/auth-settings.actions';
+import { loginAction, registerOwnerAction } from '@/features/auth/actions/credentials.actions';
 
-export function LoginView({ defaultEmail }: { defaultEmail: string }) {
+interface LoginViewProps {
+  defaultEmail: string;
+  registrationOpen?: boolean;
+  registering?: boolean;
+}
+
+export function LoginView({ defaultEmail, registrationOpen, registering }: LoginViewProps) {
   const router = useRouter();
-  const [email, setEmail] = React.useState(defaultEmail);
-  const [password, setPassword] = React.useState('');
-  const [error, setError] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loading) return;
+    const form = new FormData(event.currentTarget);
     setError('');
     setLoading(true);
     try {
-      const fd = new FormData();
-      fd.set('email', email);
-      fd.set('password', password);
-      const res = await loginAction(fd);
-      if (!res.ok) {
-        setError(res.error || 'Falha na autenticação.');
-      } else {
-        router.refresh();
+      const result = await (registering ? registerOwnerAction : loginAction)(form);
+      if (!result.ok) {
+        setError(result.error);
+        return;
       }
+      if (registering) router.replace('/');
+      router.refresh();
     } catch {
-      setError('Não foi possível entrar. Tente novamente.');
+      setError('Não foi possível concluir. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-zinc-950 p-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 shadow-xl space-y-6">
+    <main className="grid min-h-screen place-items-center bg-slate-50 p-4 dark:bg-zinc-950">
+      <div className="w-full max-w-md space-y-6 rounded-2xl border border-slate-200 bg-white p-8 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-zinc-900 dark:bg-zinc-50 flex items-center justify-center text-white dark:text-zinc-950 font-bold text-lg">
+          <div aria-hidden="true" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-zinc-900 font-bold text-white dark:bg-zinc-50 dark:text-zinc-950">
             FM
           </div>
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900 dark:text-zinc-50">
-              FinMind Pessoal
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-zinc-400">
-              Acesso exclusivo protegido com sessão autenticada
-            </p>
-          </div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-zinc-50">
+            {registering ? 'Cadastrar acesso ao FinMind' : 'FinMind Pessoal'}
+          </h1>
         </div>
 
         {error && (
-          <div className="rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 p-3 text-xs font-medium text-rose-600 dark:text-rose-300">
+          <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200">
             {error}
-          </div>
+          </p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {registering && (
+            <FormField label="Convite de cadastro" htmlFor="registration-invitation">
+              <Input id="registration-invitation" name="invitation" type="password" autoComplete="off" maxLength={128} required />
+            </FormField>
+          )}
           <FormField label="E-mail de Acesso" htmlFor="login-email">
-            <Input
-              id="login-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <Input id="login-email" name="email" type="email" defaultValue={defaultEmail} maxLength={254} autoComplete="username" required />
           </FormField>
-
           <FormField
             label="Senha de Acesso"
             htmlFor="login-password"
-            hint="Informe sua senha cadastrada"
+            hint={registering ? 'Use pelo menos 16 caracteres.' : undefined}
           >
             <Input
               id="login-password"
+              name="password"
               type="password"
-              placeholder="Digite sua senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
+              autoComplete={registering ? 'new-password' : 'current-password'}
+              minLength={registering ? 16 : undefined}
+              maxLength={72}
               required
             />
           </FormField>
-
+          {registering && (
+            <FormField label="Confirme a senha" htmlFor="registration-password-confirmation">
+              <Input id="registration-password-confirmation" name="password_confirmation" type="password" autoComplete="new-password" minLength={16} maxLength={72} required />
+            </FormField>
+          )}
+          <div aria-hidden="true" className="hidden">
+            <input name="website" type="text" tabIndex={-1} autoComplete="off" />
+          </div>
           <Button type="submit" variant="primary" size="lg" isLoading={loading} className="w-full">
             <Lock className="h-4 w-4" />
-            Entrar no Painel Financeiro
+            {registering ? 'Cadastrar e entrar' : 'Entrar no Painel Financeiro'}
           </Button>
         </form>
 
-        <div className="pt-4 border-t border-slate-100 dark:border-zinc-800 flex items-center gap-2 text-xs text-slate-400 dark:text-zinc-500">
-          <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
-          <span>Dados salvos na nuvem • Acesso protegido e criptografado</span>
-        </div>
+        {(registering || registrationOpen) && (
+          <Link className="inline-block text-sm font-medium text-indigo-700 underline-offset-4 hover:underline dark:text-indigo-300" href={registering ? '/' : '/?cadastro=1'}>
+            {registering ? 'Voltar para o login' : 'Cadastrar com convite'}
+          </Link>
+        )}
       </div>
-    </div>
+    </main>
   );
 }

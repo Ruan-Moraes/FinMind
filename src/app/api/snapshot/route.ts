@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { rejectCrossOriginWrite } from '@/shared/lib/request-origin';
 import { revalidatePath } from 'next/cache';
 import { requireAuthenticatedUser } from '@/features/auth';
 import { exportUserSnapshot } from '@/features/dashboard/services/snapshot-export';
@@ -34,6 +35,9 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : 'Sessão não autenticada.';
     return NextResponse.json({ ok: false, error: message }, { status: 401 });
   }
+
+  const blockedOrigin = rejectCrossOriginWrite(request);
+  if (blockedOrigin) return blockedOrigin;
 
   const contentType = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
   if (contentType !== 'application/json') {

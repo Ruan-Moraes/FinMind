@@ -26,20 +26,22 @@ O primeiro comando valida a geração do SQL. O segundo aplica o schema ao banco
 | `TURSO_DATABASE_URL` | URL `libsql://…` do banco de produção |
 | `TURSO_AUTH_TOKEN` | Token com acesso ao banco de produção. Tipo **Secret** |
 | `AUTH_SECRET` | Gere um valor exclusivo com `openssl rand -base64 32`. Tipo **Secret** |
-| `ADMIN_EMAIL` | Seu e-mail de login |
-| `ADMIN_PASSWORD` | Senha única gerada pelo gerenciador. Use pelo menos 16 caracteres e no máximo 72 bytes. Tipo **Secret** |
-| `ADMIN_NAME` | Seu nome, usado também na confirmação de reset |
+| `AUTH_SETUP_TOKEN` | Convite de uso único. Gere com `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Tipo **Secret** |
+| `ADMIN_EMAIL` | Opcional. Informe apenas se precisar localizar uma conta legada com e-mail diferente de `admin@finmind.app` |
+| `ADMIN_NAME` | Opcional para um banco novo. Seu nome, usado também na confirmação de reset |
 | `REQUIRE_AUTH` | `true`. Na Vercel o login é obrigatório mesmo se essa variável estiver ausente |
 
 Use o [tipo Secret da Vercel](https://vercel.com/changelog/environment-variables-now-use-config-and-secret-types) também para qualquer chave de IA que você decidir configurar. Mantenha credenciais fora do Git, de variáveis `NEXT_PUBLIC_*` e dos ambientes de Preview. Para testar previews, configure um banco separado e segredos próprios.
 
-O primeiro login provisiona a conta se o e-mail ainda estiver ausente no banco. A senha passa a ser validada pelo hash armazenado no banco. Alterar `ADMIN_PASSWORD` no painel depois disso **não** troca a senha da conta existente. Mantenha `AUTH_SECRET` estável. Sua troca invalida sessões e exige recadastrar chaves de IA que tenham sido cifradas com o valor anterior.
+Antes de atualizar uma instalação existente, aplique o schema atualizado ao Turso. As tabelas `AuthOwner`, `AuthSession` e `AuthAttempt` são aditivas. Em produção, `ADMIN_PASSWORD` não é usado. O cadastro troca as credenciais da conta antiga preservando o identificador e os dados. As sessões legadas deixam de valer.
+
+Mantenha `AUTH_SECRET` estável. Sua troca exige recadastrar chaves de IA cifradas com o valor anterior. A inscrição se encerra após o cadastro do titular e o convite pode ser removido do painel.
 
 ## 3. Verificar o primeiro deploy
 
-1. No [Firewall da Vercel](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting), configure a regra gratuita de limite por IP para `POST /`, usada pelo login e pelas ações do painel. Um ponto de partida é 30 requisições por minuto, com resposta 429.
+1. No [Firewall da Vercel](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting), configure a regra gratuita de limite por IP para `POST /`, usada pelo cadastro, login e ações do painel. Um ponto de partida é 30 requisições por minuto, com resposta 429.
 2. Abra o endereço `*.vercel.app` em janela anônima. A página inicial deve pedir e-mail e senha. As rotas `/api/export?format=json`, `/api/snapshot` e `/api/ai/providers/state` devem responder 401 sem sessão.
-3. Tente uma senha incorreta. Depois, entre com a conta de produção, confira o painel e encerre a sessão. Verifique que a tela de login volta e que as rotas privadas voltam a responder 401.
+3. Acesse **Cadastrar com convite** no domínio de produção. Informe o código, seu e-mail de acesso e uma senha de pelo menos 16 caracteres e até 72 bytes. Encerre a sessão, confirme que a opção de cadastro desapareceu e faça login com as credenciais que você escolheu. As rotas privadas devem voltar a responder 401 após o logout.
 4. Para migrar dados, exporte o snapshot na instância local em **Configurações → Snapshot Completo** e importe na instância autenticada. Guarde o arquivo em local privado.
 
 ## Limites que afetam o uso

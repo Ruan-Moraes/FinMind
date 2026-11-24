@@ -19,7 +19,7 @@ Aplicação full-stack de gestão financeira pessoal construída com **Next.js 1
 - **Importação & Conciliação Inteligente de Extratos:** upload simultâneo de **CSV, OFX, XLSX, PDF e TXT** (ou texto colado), detecção de duplicidades, memória de aprendizado, calibração de saldo pelo banco e histórico auditável com detecção de lotes duplicados, paginação e reversão controlada.
 - **Chatbot Flutuante IA com RAG, Histórico Persistido e Gráficos Dinâmicos:** acessível no canto inferior direito em qualquer tela, consulta seus dados reais no banco via RAG híbrido, salva histórico completo de conversas e renderiza gráficos Recharts dinâmicos (KPIs, Donut, Barras 6 meses e Progresso de Metas).
 - **Multi-Provedor Dinâmico (OpenAI, Google Gemini e Anthropic Claude):** descoberta ao vivo dos modelos liberados na conta do usuário em `/api/ai/models` e teste interativo em tempo real.
-- **Backup & Segurança:** **Snapshot Completo (Exportar & Importar pareado)**, reset seletivo (*apenas valores* ou *tudo do zero* com dupla confirmação), sessão JWT HttpOnly, chaves de IA criptografadas com AES-256-GCM e modo privacidade (ocultar valores).
+- **Backup & Segurança:** **Snapshot Completo (Exportar & Importar pareado)**, reset seletivo (*apenas valores* ou *tudo do zero* com dupla confirmação), cadastro por convite de uso único, sessão HttpOnly revogável, chaves de IA criptografadas com AES-256-GCM e modo privacidade (ocultar valores).
 
 ---
 

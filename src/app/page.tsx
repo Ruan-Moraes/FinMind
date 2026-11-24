@@ -5,6 +5,7 @@ import {
   isPublicAuthRequired,
   isSessionExplicitlyLoggedOut,
 } from '@/features/auth';
+import { isOwnerRegistrationOpen } from '@/features/auth/services/owner-registration';
 import { findSessionUser } from '@/features/auth/services/user-bootstrap';
 import { loadSerializedDashboardData } from '@/features/analytics/services/dashboard-data-loader';
 import { FinMindWorkbench } from '@/features/dashboard/components/finmind-workbench';
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
 
 interface PageProps {
   searchParams: Promise<{
+    cadastro?: string;
     month?: string;
     year?: string;
     compMonthA?: string;
@@ -26,20 +28,24 @@ interface PageProps {
 export default async function HomePage({ searchParams }: PageProps) {
   const resolvedParams = await searchParams;
   const publicAuthRequired = isPublicAuthRequired();
-  const [session, loggedOut] = await Promise.all([
-    getSession(),
-    isSessionExplicitlyLoggedOut(),
-  ]);
-
-  if (loggedOut) {
-    const defaultEmail = publicAuthRequired ? '' : (await ensurePersonalUserInitialized()).email;
-    return <LoginView defaultEmail={defaultEmail} />;
-  }
-
   const user = publicAuthRequired
-    ? await findSessionUser(session)
+    ? await findSessionUser(await getSession())
     : await ensurePersonalUserInitialized();
-  if (!user) return <LoginView defaultEmail="" />;
+
+  if (publicAuthRequired && !user) {
+    const registrationOpen = await isOwnerRegistrationOpen();
+    return (
+      <LoginView
+        key={registrationOpen && resolvedParams.cadastro === '1' ? 'registration' : 'login'}
+        defaultEmail=""
+        registrationOpen={registrationOpen}
+        registering={registrationOpen && resolvedParams.cadastro === '1'}
+      />
+    );
+  }
+  if (!user || await isSessionExplicitlyLoggedOut()) {
+    return <LoginView defaultEmail={user?.email ?? ''} />;
+  }
 
   const workbenchProps = await loadSerializedDashboardData({
     user,
