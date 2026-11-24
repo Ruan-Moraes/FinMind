@@ -103,6 +103,15 @@ export interface CapturedAnnotatedImage {
   capturedAt: string;
 }
 
+export interface PendingBatchItemPreview {
+  toolName: string;
+  actionLabel: string;
+  title: string;
+  summary: string;
+  beforePreview: Array<{ label: string; value: string }>;
+  afterPreview: Array<{ label: string; value: string }>;
+}
+
 export interface PendingAgentMutation {
   auditLogId: string;
   runId: string;
@@ -113,6 +122,7 @@ export interface PendingAgentMutation {
   summary: string;
   beforePreview: Array<{ label: string; value: string }>;
   afterPreview: Array<{ label: string; value: string }>;
+  batchItems?: PendingBatchItemPreview[];
   params: Record<string, unknown>;
   postConfirmVisualSteps: AgentVisualStep[];
   reversible: boolean;

@@ -2,6 +2,7 @@ import type {
   AgentModality,
   AgentRiskLevel,
   PendingAgentMutation,
+  PendingBatchItemPreview,
 } from '@/features/ai-agent/domain/agent-types';
 import {
   createAgentAuditLog,
@@ -9,6 +10,28 @@ import {
 } from '@/features/ai-agent/services/agent-audit-service';
 import type { PreparedMutationPreview } from '@/features/ai-agent/tools/tool-executor-types';
 import type { BatchMutationItemParam } from '@/features/ai-agent/tools/tool-executors-batch';
+
+const TOOL_ACTION_LABELS: Record<string, string> = {
+  upsert_category: 'Categoria',
+  categorize_transactions: 'Classificação',
+  upsert_static_rule: 'Regra Fixa',
+  upsert_portfolio_goal: 'Meta de Carteira',
+  delete_portfolio_goal: 'Excluir Meta',
+  create_transaction: 'Lançamento',
+  upsert_value_forecast: 'Previsão de Valor',
+  update_user_preferences: 'Preferências',
+  update_transaction: 'Editar Lançamento',
+  delete_transaction: 'Excluir Lançamento',
+  delete_static_rule: 'Excluir Regra Fixa',
+  set_static_rule_month: 'Regra Fixa no Mês',
+  upsert_budget: 'Limite de Gasto',
+  delete_budget: 'Excluir Limite',
+  delete_value_forecast: 'Excluir Previsão',
+  upsert_balance_target: 'Meta de Saldo',
+  upsert_account: 'Conta',
+  upsert_credit_card: 'Cartão',
+  pay_credit_card_invoice: 'Pagar Fatura',
+};
 
 export interface PreparedMutationEntry {
   toolName: string;
@@ -94,6 +117,15 @@ export async function buildPendingMutationFromPrepared(params: {
     });
   }
 
+  const batchItems: PendingBatchItemPreview[] = prepared.map((p) => ({
+    toolName: p.toolName,
+    actionLabel: TOOL_ACTION_LABELS[p.toolName] || 'Ação',
+    title: p.preview.title,
+    summary: p.preview.summary,
+    beforePreview: p.preview.beforePreview,
+    afterPreview: p.preview.afterPreview,
+  }));
+
   const firstVisualSteps = prepared[0]?.preview.postConfirmVisualSteps || [];
 
   return {
@@ -107,10 +139,11 @@ export async function buildPendingMutationFromPrepared(params: {
       summary: `Executar ${items.length} alterações em sequência e verificar cada gravação no banco.`,
       beforePreview: [{ label: 'Operações agrupadas', value: `${items.length} itens prontos para confirmação única` }],
       afterPreview: shownAfter,
+      batchItems,
       params: { items },
       postConfirmVisualSteps: firstVisualSteps,
       reversible: prepared.every((p) => p.preview.reversible),
     },
-    narrative: `Preparei um **Plano em Lote com ${items.length} ações** agrupadas abaixo. Revise os itens e clique em **Confirmar e Executar** para aplicar todos de uma vez com verificação no banco.`,
+    narrative: `Preparei um **Plano em Lote com ${items.length} ações** agrupadas abaixo. Revise cada etapa e clique em **Confirmar e Executar** para aplicar todas de uma vez com verificação no banco.`,
   };
 }
