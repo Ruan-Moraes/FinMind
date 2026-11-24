@@ -15,6 +15,7 @@ import {
   updateAuditLogStatus,
 } from '@/features/ai-agent/services/agent-audit-service';
 import { getMutationToolExecutor } from '@/features/ai-agent/tools/tool-dispatcher';
+import { syncUserFinancialKnowledge } from '@/features/ai-copilot/rag';
 
 function buildSessionTitle(message: string): string {
   const clean = message.trim().replace(/\s+/g, ' ');
@@ -152,6 +153,8 @@ export async function confirmAndExecuteAgentAction(auditLogId: string): Promise<
         durationMs,
       });
 
+      // Executores gravam direto no banco: reindexa o RAG aqui para a busca semântica não ficar defasada.
+      await syncUserFinancialKnowledge(user.id).catch(() => undefined);
       revalidatePath('/');
       return {
         ok: true,
@@ -213,6 +216,7 @@ export async function rollbackAgentExecutionAction(
         where: { id: log.id, userId: user.id, status: 'SUCCEEDED' },
         data: { status: 'ROLLED_BACK' },
       });
+      await syncUserFinancialKnowledge(user.id).catch(() => undefined);
       revalidatePath('/');
     }
     return res;

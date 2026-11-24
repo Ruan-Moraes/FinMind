@@ -95,6 +95,7 @@ export async function updateAccountForUser(
     },
   });
 
+  await syncUserFinancialKnowledge(userId).catch(() => {});
   return { ok: true as const, account: updated };
 }
 

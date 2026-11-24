@@ -9,7 +9,7 @@ import {
 } from "@/features/ai-copilot/rag/rag-math-and-security";
 import { generateEmbeddingsBatch } from "@/features/ai-copilot/rag/embedding-gateway";
 
-import { syncUserFinancialKnowledge } from "@/features/ai-copilot/rag/knowledge-sync";
+import { ensureFreshUserFinancialKnowledge } from "@/features/ai-copilot/rag/knowledge-sync";
 
 /**
  * Executa Recuperação Contextual Híbrida (Semântica Vetorial + Léxica/Temporal)
@@ -33,7 +33,7 @@ export async function retrieveFinancialContextForQuery(params: {
   const { userId, query, topK = 15, userKeys } = params;
 
   // Garante que a base de conhecimento do usuário esteja sincronizada com o banco atual
-  await syncUserFinancialKnowledge(userId, userKeys);
+  await ensureFreshUserFinancialKnowledge(userId, userKeys);
 
   const allUserChunks = await prisma.financialKnowledgeChunk.findMany({
     where: { userId },

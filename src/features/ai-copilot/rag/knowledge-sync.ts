@@ -10,18 +10,63 @@ import { buildCandidateKnowledgeDocs } from "@/features/ai-copilot/rag/knowledge
  * - Remove chunks de registros que foram excluídos ou revertidos.
  * - Preserva isolamento absoluto por `userId`.
  */
+const lastSyncAtByUser = new Map<string, number>();
+const inFlightByUser = new Map<string, Promise<unknown>>();
+/** Janela em que a busca confia no índice sem reler o banco (mutações sincronizam por conta própria). */
+export const RAG_SYNC_MAX_AGE_MS = 60_000;
+
+/**
+ * Usada pelas consultas (busca semântica): só sincroniza se o índice deste usuário não foi
+ * sincronizado neste processo nos últimos `maxAgeMs`, e deduplica sincronizações concorrentes.
+ * Toda mutação chama `syncUserFinancialKnowledge` diretamente, então o índice fica fresco após escritas.
+ */
+export async function ensureFreshUserFinancialKnowledge(
+  userId: string,
+  userKeys?: { openaiApiKey?: string | null; geminiApiKey?: string | null },
+  maxAgeMs = RAG_SYNC_MAX_AGE_MS
+): Promise<void> {
+  const pending = inFlightByUser.get(userId);
+  if (pending) {
+    await pending;
+    return;
+  }
+  const last = lastSyncAtByUser.get(userId);
+  if (last !== undefined && Date.now() - last < maxAgeMs) return;
+  await syncUserFinancialKnowledge(userId, userKeys);
+}
+
+type SyncResult = {
+  totalActiveChunks: number;
+  upsertedCount: number;
+  deletedCount: number;
+  embeddingModelUsed: string;
+};
+
 export async function syncUserFinancialKnowledge(
   userId: string,
   userKeys?: {
     openaiApiKey?: string | null;
     geminiApiKey?: string | null;
   }
-): Promise<{
-  totalActiveChunks: number;
-  upsertedCount: number;
-  deletedCount: number;
-  embeddingModelUsed: string;
-}> {
+): Promise<SyncResult> {
+  const run = syncUserFinancialKnowledgeUncached(userId, userKeys);
+  inFlightByUser.set(userId, run);
+  try {
+    const result = await run;
+    lastSyncAtByUser.set(userId, Date.now());
+    return result;
+  } finally {
+    if (inFlightByUser.get(userId) === run) inFlightByUser.delete(userId);
+  }
+}
+
+async function syncUserFinancialKnowledgeUncached(
+  userId: string,
+  userKeys?: {
+    openaiApiKey?: string | null;
+    geminiApiKey?: string | null;
+  }
+): Promise<SyncResult> {
   const [transactions, rules, goals, budgets, existingChunks] = await Promise.all([
     prisma.transaction.findMany({
       where: { userId },
