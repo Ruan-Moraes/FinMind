@@ -100,4 +100,13 @@ describe('Integração: Snapshot Completo (Exportação & Restauração Pareada)
     expect(settingsAfter?.theme).toBe('LIGHT');
     expect(settingsAfter?.defaultAccountId).toBe(accountsAfter[0].id);
   });
+
+  it('importa backups antigos que ainda trazem `subcategories` e `subcategoryId` (campos removidos)', async () => {
+    const { snapshot } = await exportUserSnapshot(userId);
+    const legacy = JSON.parse(JSON.stringify(snapshot));
+    legacy.data.subcategories = [{ id: 'old-sub', categoryId: legacy.data.categories[0].id, name: 'Antiga' }];
+    legacy.data.transactions[0].subcategoryId = 'old-sub';
+    const res = await importUserSnapshot(userId, legacy);
+    expect(res.ok).toBe(true);
+  });
 });

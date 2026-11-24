@@ -14,7 +14,7 @@ export async function exportUserSnapshot(userId: string): Promise<{
   filename: string;
 }> {
   const [
-    settings, accounts, creditCards, creditCardInvoices, categories, subcategories,
+    settings, accounts, creditCards, creditCardInvoices, categories,
     installmentGroups, recurrenceRules, statementImportBatches, statementImportFiles,
     transactions, attachments, budgets, portfolioGoals, reconciliationMemoryRules,
     aiReports, valueForecastItems, balanceTargetChecks, holidays,
@@ -24,7 +24,6 @@ export async function exportUserSnapshot(userId: string): Promise<{
     prisma.creditCard.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
     prisma.creditCardInvoice.findMany({ where: { creditCard: { userId } }, orderBy: [{ year: 'asc' }, { month: 'asc' }] }),
     prisma.category.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-    prisma.subcategory.findMany({ where: { category: { userId } } }),
     prisma.installmentGroup.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
     prisma.recurrenceRule.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
     prisma.statementImportBatch.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
@@ -76,7 +75,6 @@ export async function exportUserSnapshot(userId: string): Promise<{
         id: c.id, name: c.name, type: c.type, defaultNature: c.defaultNature,
         color: c.color, icon: c.icon, createdAt: iso(c.createdAt),
       })),
-      subcategories: subcategories.map((s) => ({ id: s.id, categoryId: s.categoryId, name: s.name })),
       installmentGroups: installmentGroups.map((g) => ({
         id: g.id, description: g.description, totalAmountInCents: g.totalAmountInCents,
         totalInstallments: g.totalInstallments, createdAt: iso(g.createdAt),
@@ -106,7 +104,7 @@ export async function exportUserSnapshot(userId: string): Promise<{
         date: iso(t.date), description: t.description, status: t.status, tags: t.tags,
         sourceAccountId: t.sourceAccountId, destinationAccountId: t.destinationAccountId,
         creditCardId: t.creditCardId, invoiceId: t.invoiceId, categoryId: t.categoryId,
-        subcategoryId: t.subcategoryId, installmentGroupId: t.installmentGroupId,
+        installmentGroupId: t.installmentGroupId,
         recurrenceRuleId: t.recurrenceRuleId, installmentNumber: t.installmentNumber,
         totalInstallments: t.totalInstallments, importBatchId: t.importBatchId,
         importFileId: t.importFileId, externalTransactionHash: t.externalTransactionHash,

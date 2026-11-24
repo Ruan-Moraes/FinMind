@@ -15,21 +15,21 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  authOwner       AuthOwner?
-  authSessions    AuthSession[]
-  settings        UserSettings?
-  accounts        Account[]
-  creditCards     CreditCard[]
-  categories      Category[]
-  transactions    Transaction[]
-  budgets         Budget[]
-  portfolioGoals  PortfolioGoal[]
-  recurrenceRules   RecurrenceRule[]
-  installmentGroups InstallmentGroup[]
-  aiReports         AiAnalysisReport[]
-  importBatches     StatementImportBatch[]
-  memoryRules       ReconciliationMemoryRule[]
-  knowledgeChunks   FinancialKnowledgeChunk[]
+  authOwner           AuthOwner?
+  authSessions        AuthSession[]
+  settings            UserSettings?
+  accounts            Account[]
+  creditCards         CreditCard[]
+  categories          Category[]
+  transactions        Transaction[]
+  budgets             Budget[]
+  portfolioGoals      PortfolioGoal[]
+  recurrenceRules     RecurrenceRule[]
+  installmentGroups   InstallmentGroup[]
+  aiReports           AiAnalysisReport[]
+  importBatches       StatementImportBatch[]
+  memoryRules         ReconciliationMemoryRule[]
+  knowledgeChunks     FinancialKnowledgeChunk[]
   valueForecastItems  ValueForecastItem[]
   balanceTargetChecks BalanceTargetCheck[]
   aiChatSessions      AiChatSession[]
@@ -61,36 +61,36 @@ model AuthAttempt {
 }
 
 model UserSettings {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  theme               String   @default("DARK")         // LIGHT | DARK | SYSTEM
-  density             String   @default("COMFORTABLE")  // COMFORTABLE | COMPACT
-  hideValuesByDefault Boolean  @default(false)
-  fiscalMonthStartDay Int      @default(1)              // 1 a 31
+  id                  String  @id @default(cuid())
+  userId              String  @unique
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme               String  @default("DARK") // LIGHT | DARK | SYSTEM
+  density             String  @default("COMFORTABLE") // COMFORTABLE | COMPACT
+  hideValuesByDefault Boolean @default(false)
+  fiscalMonthStartDay Int     @default(1) // 1 a 31
   defaultAccountId    String?
-  holidayState        String?  // UF do usuário para feriados estaduais (ex: MG, SP)
-  holidayCity         String?  // Cidade do usuário para feriados municipais
+  holidayState        String? // UF do usuário para feriados estaduais (ex: MG, SP)
+  holidayCity         String? // Cidade do usuário para feriados municipais
 
   // Configurações de IA (Assinatura & Cota API) salvas no banco (RF-27)
-  aiProvider          String   @default("OPENAI")       // OPENAI | GEMINI | CLAUDE
-  aiConnectionMode    String   @default("SUBSCRIPTION") // SUBSCRIPTION | API_QUOTA
-  openaiApiKey        String?
-  geminiApiKey        String?
-  claudeApiKey        String?
-  openaiModel         String   @default("gpt-4o-mini")
-  geminiModel         String   @default("gemini-2.0-flash")
-  claudeModel         String   @default("claude-3-5-sonnet-latest")
+  aiProvider       String  @default("OPENAI") // OPENAI | GEMINI | CLAUDE
+  aiConnectionMode String  @default("SUBSCRIPTION") // SUBSCRIPTION | API_QUOTA
+  openaiApiKey     String?
+  geminiApiKey     String?
+  claudeApiKey     String?
+  openaiModel      String  @default("gpt-4o-mini")
+  geminiModel      String  @default("gemini-2.0-flash")
+  claudeModel      String  @default("claude-3-5-sonnet-latest")
 
-  updatedAt           DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 }
 
 model AiAnalysisReport {
   id             String   @id @default(cuid())
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  provider       String   // OPENAI | GEMINI | CLAUDE
-  connectionMode String   // SUBSCRIPTION | API_QUOTA | SMART_LOCAL
+  provider       String // OPENAI | GEMINI | CLAUDE
+  connectionMode String // SUBSCRIPTION | API_QUOTA | SMART_LOCAL
   healthScore    Int      @default(80) // 0 a 100
   summary        String
   strengthsJson  String   @default("[]")
@@ -123,7 +123,7 @@ model CreditCard {
   brand        String   @default("Mastercard")
   limitInCents Int      @default(0)
   closingDay   Int      @default(25) // 1 a 31
-  dueDay       Int      @default(5)  // 1 a 31
+  dueDay       Int      @default(5) // 1 a 31
   color        String   @default("#6366f1")
   createdAt    DateTime @default(now())
 
@@ -133,15 +133,15 @@ model CreditCard {
 }
 
 model CreditCardInvoice {
-  id                String      @id @default(cuid())
+  id                String     @id @default(cuid())
   creditCardId      String
-  creditCard        CreditCard  @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  month             Int         // 1 a 12
-  year              Int         // ex: 2026
-  status            String      @default("OPEN") // OPEN | CLOSED | PAID
-  paidAmountInCents Int         @default(0)
+  creditCard        CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  month             Int // 1 a 12
+  year              Int // ex: 2026
+  status            String     @default("OPEN") // OPEN | CLOSED | PAID
+  paidAmountInCents Int        @default(0)
   paidAt            DateTime?
-  createdAt         DateTime    @default(now())
+  createdAt         DateTime   @default(now())
 
   transactions Transaction[]
 
@@ -153,25 +153,15 @@ model Category {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name          String
-  type          String   @default("EXPENSE")  // INCOME | EXPENSE
+  type          String   @default("EXPENSE") // INCOME | EXPENSE
   defaultNature String   @default("VARIABLE") // STATIC | VARIABLE
   color         String   @default("#6366f1")
   icon          String   @default("Tag")
   createdAt     DateTime @default(now())
 
-  subcategories   Subcategory[]
   transactions    Transaction[]
   budgets         Budget[]
   recurrenceRules RecurrenceRule[]
-}
-
-model Subcategory {
-  id         String   @id @default(cuid())
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  name       String
-
-  transactions Transaction[]
 }
 
 model InstallmentGroup {
@@ -189,56 +179,54 @@ model InstallmentGroup {
 }
 
 model RecurrenceRule {
-  id            String      @id @default(cuid())
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  description   String
-  type          String      @default("EXPENSE") // INCOME | EXPENSE
-  nature        String      @default("STATIC")  // STATIC | VARIABLE
-  amountInCents Int
-  frequency       String      @default("MONTHLY")      // MONTHLY | WEEKLY | YEARLY
-  dayOfMonth      Int         @default(5)
-  dayType         String      @default("CALENDAR_DAY") // CALENDAR_DAY | BUSINESS_DAY
-  includeSaturday Boolean     @default(false)          // Regra CLT (considera sábado útil)
-  skippedMonths    String      @default("[]")           // JSON array de meses pulados ["2026-11"]
-  monthlyOverrides String      @default("{}")           // JSON map {"2026-11": 52000} de valores ajustados no mês
+  id               String      @id @default(cuid())
+  userId           String
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  description      String
+  type             String      @default("EXPENSE") // INCOME | EXPENSE
+  nature           String      @default("STATIC") // STATIC | VARIABLE
+  amountInCents    Int
+  frequency        String      @default("MONTHLY") // MONTHLY | WEEKLY | YEARLY
+  dayOfMonth       Int         @default(5)
+  dayType          String      @default("CALENDAR_DAY") // CALENDAR_DAY | BUSINESS_DAY
+  includeSaturday  Boolean     @default(false) // Regra CLT (considera sábado útil)
+  skippedMonths    String      @default("[]") // JSON array de meses pulados ["2026-11"]
+  monthlyOverrides String      @default("{}") // JSON map {"2026-11": 52000} de valores ajustados no mês
   isActive         Boolean     @default(true)
-  categoryId    String?
-  category      Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  accountId     String?
-  account       Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  creditCardId  String?
-  creditCard    CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
-  createdAt     DateTime    @default(now())
+  categoryId       String?
+  category         Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  accountId        String?
+  account          Account?    @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  creditCardId     String?
+  creditCard       CreditCard? @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  createdAt        DateTime    @default(now())
 
   transactions Transaction[]
 }
 
 model Transaction {
-  id                   String             @id @default(cuid())
-  userId               String
-  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type                 String             // INCOME | EXPENSE | TRANSFER
-  nature               String             @default("VARIABLE") // STATIC | VARIABLE
-  amountInCents        Int
-  date                 DateTime
-  description          String
-  status               String             @default("COMPLETED") // COMPLETED | PENDING
-  tags                 String             @default("")          // Comma-separated tags ex: "viagem,trabalho"
-  sourceAccountId      String?
-  sourceAccount        Account?           @relation("SourceAccount", fields: [sourceAccountId], references: [id], onDelete: SetNull)
-  destinationAccountId String?
-  destinationAccount   Account?           @relation("DestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
-  creditCardId         String?
-  creditCard           CreditCard?        @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
-  invoiceId            String?
-  invoice              CreditCardInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  categoryId           String?
-  category             Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  subcategoryId        String?
-  subcategory          Subcategory?       @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
-  installmentGroupId   String?
-  installmentGroup     InstallmentGroup?  @relation(fields: [installmentGroupId], references: [id], onDelete: Cascade)
+  id                      String                @id @default(cuid())
+  userId                  String
+  user                    User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type                    String // INCOME | EXPENSE | TRANSFER
+  nature                  String                @default("VARIABLE") // STATIC | VARIABLE
+  amountInCents           Int
+  date                    DateTime
+  description             String
+  status                  String                @default("COMPLETED") // COMPLETED | PENDING
+  tags                    String                @default("") // Comma-separated tags ex: "viagem,trabalho"
+  sourceAccountId         String?
+  sourceAccount           Account?              @relation("SourceAccount", fields: [sourceAccountId], references: [id], onDelete: SetNull)
+  destinationAccountId    String?
+  destinationAccount      Account?              @relation("DestinationAccount", fields: [destinationAccountId], references: [id], onDelete: SetNull)
+  creditCardId            String?
+  creditCard              CreditCard?           @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  invoiceId               String?
+  invoice                 CreditCardInvoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  categoryId              String?
+  category                Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installmentGroupId      String?
+  installmentGroup        InstallmentGroup?     @relation(fields: [installmentGroupId], references: [id], onDelete: Cascade)
   recurrenceRuleId        String?
   recurrenceRule          RecurrenceRule?       @relation(fields: [recurrenceRuleId], references: [id], onDelete: SetNull)
   installmentNumber       Int?
@@ -269,19 +257,19 @@ model Transaction {
 }
 
 model StatementImportBatch {
-  id                       String                @id @default(cuid())
+  id                       String    @id @default(cuid())
   userId                   String
-  user                     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status                   String                @default("COMMITTED") // COMMITTED | REVERTED
-  fileCount                Int                   @default(1)
-  totalMovements           Int                   @default(0)
-  reconciledCount          Int                   @default(0)
-  createdTransactionsCount Int                   @default(0)
-  skippedDuplicatesCount   Int                   @default(0)
-  aiProvider               String                @default("OPENAI")
-  aiModelId                String                @default("gpt-4o-mini")
-  summaryJson              String                @default("{}") // Snapshot de auditoria e rollback
-  createdAt                DateTime              @default(now())
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status                   String    @default("COMMITTED") // COMMITTED | REVERTED
+  fileCount                Int       @default(1)
+  totalMovements           Int       @default(0)
+  reconciledCount          Int       @default(0)
+  createdTransactionsCount Int       @default(0)
+  skippedDuplicatesCount   Int       @default(0)
+  aiProvider               String    @default("OPENAI")
+  aiModelId                String    @default("gpt-4o-mini")
+  summaryJson              String    @default("{}") // Snapshot de auditoria e rollback
+  createdAt                DateTime  @default(now())
   revertedAt               DateTime?
 
   files        StatementImportFile[]
@@ -346,9 +334,9 @@ model PortfolioGoal {
   userId              String
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title               String
-  targetAmountInCents Int      // ex: 700000 para R$ 7.000,00
-  targetMonth         Int      // 1 a 12
-  targetYear          Int      // ex: 2026
+  targetAmountInCents Int // ex: 700000 para R$ 7.000,00
+  targetMonth         Int // 1 a 12
+  targetYear          Int // ex: 2026
   status              String   @default("IN_PROGRESS") // IN_PROGRESS | ACHIEVED | CANCELLED
   notes               String?
   createdAt           DateTime @default(now())
@@ -361,7 +349,7 @@ model Attachment {
   fileName      String
   mimeType      String
   sizeInBytes   Int
-  fileDataUrl   String      // Base64 Data URL ou URL Cloudflare R2
+  fileDataUrl   String // Base64 Data URL ou URL Cloudflare R2
   createdAt     DateTime    @default(now())
 }
 
@@ -369,7 +357,7 @@ model FinancialKnowledgeChunk {
   id             String    @id @default(cuid())
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceType     String    // TRANSACTION | RECURRENCE_RULE | PORTFOLIO_GOAL | BUDGET | MONTHLY_SUMMARY
+  sourceType     String // TRANSACTION | RECURRENCE_RULE | PORTFOLIO_GOAL | BUDGET | MONTHLY_SUMMARY
   sourceId       String
   referenceDate  DateTime?
   month          Int?
@@ -395,7 +383,7 @@ model ValueForecastItem {
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   title         String
-  type          String   // INCOME | EXPENSE
+  type          String // INCOME | EXPENSE
   amountInCents Int
   expectedDate  DateTime
   notes         String?
@@ -435,9 +423,9 @@ model AiChatMessage {
   id           String        @id @default(cuid())
   sessionId    String
   session      AiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role         String        // user | assistant
+  role         String // user | assistant
   content      String
-  responseJson String?       // JSON serializado de AssistantStructuredResponse
+  responseJson String? // JSON serializado de AssistantStructuredResponse
   createdAt    DateTime      @default(now())
 
   @@index([sessionId, createdAt])
@@ -447,10 +435,10 @@ model Holiday {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  date      String   // YYYY-MM-DD (timezone-safe)
+  date      String // YYYY-MM-DD (timezone-safe)
   year      Int
   name      String
-  scope     String   @default("NATIONAL")   // NATIONAL | STATE | MUNICIPAL
+  scope     String   @default("NATIONAL") // NATIONAL | STATE | MUNICIPAL
   stateCode String?
   cityName  String?
   source    String   @default("BRASIL_API") // BRASIL_API | STATE_CATALOG | AI | MANUAL
@@ -505,10 +493,10 @@ model AgentActionAuditLog {
   sessionId              String?
   runId                  String
   idempotencyKey         String   @unique
-  modality               String   // ANALYTICAL | AUTONOMOUS | INTERACTIVE_GUIDE | ANNOTATED_SCREENSHOT | HYBRID
+  modality               String // ANALYTICAL | AUTONOMOUS | INTERACTIVE_GUIDE | ANNOTATED_SCREENSHOT | HYBRID
   toolName               String
-  riskLevel              String   // L0 | L1 | L2 | L3 | BLOCKED
-  status                 String   // PLANNED | AWAITING_CONFIRMATION | EXECUTING | SUCCEEDED | FAILED | CANCELLED | ROLLED_BACK
+  riskLevel              String // L0 | L1 | L2 | L3 | BLOCKED
+  status                 String // PLANNED | AWAITING_CONFIRMATION | EXECUTING | SUCCEEDED | FAILED | CANCELLED | ROLLED_BACK
   paramsJson             String   @default("{}")
   beforeStateJson        String?
   afterStateJson         String?

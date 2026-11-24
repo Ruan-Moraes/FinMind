@@ -48,7 +48,6 @@ export async function importUserSnapshot(
     cardMap: buildIdMap(d.creditCards),
     invMap: buildIdMap(d.creditCardInvoices),
     catMap: buildIdMap(d.categories),
-    subMap: buildIdMap(d.subcategories),
     instMap: buildIdMap(d.installmentGroups),
     ruleMap: buildIdMap(d.recurrenceRules),
     batchMap: buildIdMap(d.statementImportBatches),
@@ -77,7 +76,6 @@ export async function importUserSnapshot(
     await tx.aiChatMessage.deleteMany({ where: { session: { userId } } });
     await tx.aiChatSession.deleteMany({ where: { userId } });
     await tx.account.deleteMany({ where: { userId } });
-    await tx.subcategory.deleteMany({ where: { category: { userId } } });
     await tx.category.deleteMany({ where: { userId } });
 
     if (d.accounts.length > 0) {
@@ -118,15 +116,6 @@ export async function importUserSnapshot(
           id: maps.catMap.get(c.id)!, userId, name: c.name, type: c.type,
           defaultNature: c.defaultNature, color: c.color, icon: c.icon,
           createdAt: toDate(c.createdAt),
-        })),
-      });
-    }
-
-    const validSubcats = d.subcategories.filter((s) => maps.catMap.has(s.categoryId));
-    if (validSubcats.length > 0) {
-      await tx.subcategory.createMany({
-        data: validSubcats.map((s) => ({
-          id: maps.subMap.get(s.id)!, categoryId: maps.catMap.get(s.categoryId)!, name: s.name,
         })),
       });
     }

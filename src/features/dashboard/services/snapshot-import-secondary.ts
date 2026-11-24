@@ -6,7 +6,6 @@ export interface SnapshotIdMaps {
   cardMap: Map<string, string>;
   invMap: Map<string, string>;
   catMap: Map<string, string>;
-  subMap: Map<string, string>;
   instMap: Map<string, string>;
   ruleMap: Map<string, string>;
   batchMap: Map<string, string>;
@@ -23,7 +22,7 @@ export async function restoreSecondarySnapshotEntities(
   d: FinMindSnapshot['data'],
   maps: SnapshotIdMaps
 ): Promise<void> {
-  const { accMap, cardMap, invMap, catMap, subMap, instMap, ruleMap, batchMap, fileMap, txMap } = maps;
+  const { accMap, cardMap, invMap, catMap, instMap, ruleMap, batchMap, fileMap, txMap } = maps;
 
   if (d.transactions.length > 0) {
     await tx.transaction.createMany({
@@ -36,7 +35,6 @@ export async function restoreSecondarySnapshotEntities(
         creditCardId: mapRef(cardMap, t.creditCardId),
         invoiceId: mapRef(invMap, t.invoiceId),
         categoryId: mapRef(catMap, t.categoryId),
-        subcategoryId: mapRef(subMap, t.subcategoryId),
         installmentGroupId: mapRef(instMap, t.installmentGroupId),
         recurrenceRuleId: mapRef(ruleMap, t.recurrenceRuleId),
         installmentNumber: t.installmentNumber, totalInstallments: t.totalInstallments,

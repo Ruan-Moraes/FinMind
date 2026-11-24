@@ -123,7 +123,6 @@ erDiagram
   User ||--o{ AiAnalysisReport : gera
 
   CreditCard ||--o{ CreditCardInvoice : fecha
-  Category ||--o{ Subcategory : agrupa
   StatementImportBatch ||--o{ StatementImportFile : contem
   Transaction ||--o{ Attachment : anexa
   AiChatSession ||--o{ AiChatMessage : registra

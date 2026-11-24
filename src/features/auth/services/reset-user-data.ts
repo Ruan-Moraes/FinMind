@@ -71,7 +71,6 @@ export async function resetAllFinancialDataForUser(
     prisma.aiChatMessage.deleteMany({ where: { session: { userId: user.id } } }),
     prisma.aiChatSession.deleteMany({ where: { userId: user.id } }),
     prisma.account.deleteMany({ where: { userId: user.id } }),
-    prisma.subcategory.deleteMany({ where: { category: { userId: user.id } } }),
     prisma.category.deleteMany({ where: { userId: user.id } }),
     prisma.userSettings.updateMany({
       where: { userId: user.id },

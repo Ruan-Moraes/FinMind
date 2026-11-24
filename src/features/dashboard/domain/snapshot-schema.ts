@@ -42,7 +42,6 @@ export const finMindSnapshotSchema = z.object({
     creditCards: z.array(snapshotCreditCardSchema).default([]),
     creditCardInvoices: z.array(snapshotInvoiceSchema).default([]),
     categories: z.array(snapshotCategorySchema).default([]),
-    subcategories: z.array(z.object({ id: z.string(), categoryId: z.string(), name: z.string() })).default([]),
     installmentGroups: z
       .array(
         z.object({

@@ -78,7 +78,6 @@ export const snapshotTransactionSchema = z.object({
   creditCardId: nullableString,
   invoiceId: nullableString,
   categoryId: nullableString,
-  subcategoryId: nullableString,
   installmentGroupId: nullableString,
   recurrenceRuleId: nullableString,
   installmentNumber: z.number().int().nullable().optional().default(null),
