@@ -1,9 +1,9 @@
 ---
 docId: goals-and-static-rules
 module: goals
-version: 1.2.0
+version: 1.3.0
 screens: ["goals", "modal:GOAL", "modal:STATIC_RULE", "modal:BUDGET", "modal:CATEGORY"]
-relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "upsert_category", "categorize_transactions"]
+relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "upsert_category", "categorize_transactions", "upsert_budget", "delete_budget", "delete_static_rule", "set_static_rule_month", "query_budgets", "query_static_rules", "query_categories", "query_portfolio_goals"]
 tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo estatico", "ganho estatico", "dia util", "orcamento", "limite de gasto", "categoria", "categorias de gastos"]
 ---
 
@@ -54,3 +54,9 @@ tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo est
 - O cálculo de previsão das metas prioriza o ritmo da linha de base estática (`Ganhos Estáticos - Custos Estáticos`); caso não existam regras, utiliza a média do extrato.
 - **Meta Fictícia (Com Previsão de Valor):** Quando existem itens cadastrados na aba **Previsão de Valor** (`Vou Ganhar` / `Provável Gasto`), cada meta individual e o painel **Metas Juntas** exibem automaticamente um cenário simulado mês a mês mostrando o novo tempo estimado para alcançar as metas considerando essas entradas e saídas futuras. Quando não há previsões cadastradas, o sistema exibe apenas a meta normal.
 - Orçamentos (`Budget`) têm chave única por `(categoria, mês, ano)`; salvar para a mesma categoria atualiza o teto existente.
+
+## O que o Agente IA pode fazer aqui
+- **Metas:** criar, alterar (informando o nome da meta existente) e excluir. Se a meta citada não for encontrada, o agente pergunta em vez de criar uma nova por engano.
+- **Regras fixas:** criar, **editar** (informando a descrição atual em `matchDescription`), excluir, e ações pontuais por mês: **pular**, **reativar**, **ajustar valor só naquele mês** e **voltar ao valor base** (`set_static_rule_month`). Criar uma regra com a mesma descrição de outra existente é recusado para evitar duplicidade. Dia útil vai de 1º a 23º.
+- **Orçamentos:** definir, alterar e remover o limite de uma categoria de despesa (`upsert_budget`, `delete_budget`); consultar consumo, saldo restante e status (OK, ATENÇÃO ≥70%, CRÍTICO ≥90%, ESTOURADO) com `query_budgets`.
+- **Categorias:** criar/editar e classificar lançamentos em lote.

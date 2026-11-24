@@ -1,9 +1,9 @@
 ---
 docId: transactions-and-ledger
 module: transactions
-version: 1.1.0
+version: 1.2.0
 screens: ["transactions", "modal:TX"]
-relatedTools: ["navigate_to_section", "apply_transaction_filters", "query_expenses_and_transactions", "create_transaction", "guide_feature_workflow", "capture_annotated_screen"]
+relatedTools: ["navigate_to_section", "apply_transaction_filters", "query_expenses_and_transactions", "create_transaction", "guide_feature_workflow", "capture_annotated_screen", "update_transaction", "delete_transaction", "query_categories", "categorize_transactions"]
 tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferencia", "parcelamento", "filtro", "comprovante"]
 ---
 
@@ -17,7 +17,7 @@ tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferenci
 - **Busca textual** (`transactions.filter.search`): pesquisa por descrição, categoria, tags, conta ou cartão.
 - **Tipo** (`transactions.filter.type`): `ALL` (Todos), `INCOME` (Receitas), `EXPENSE` (Despesas), `TRANSFER` (Transferências).
 - **Natureza** (`transactions.filter.nature`): `ALL` (Todas), `STATIC` (Fixo / Estático), `VARIABLE` (Variável).
-- **Categoria** (`transactions.filter.category`): filtra por qualquer categoria cadastrada.
+- **Categoria** (`transactions.filter.category`): filtra por qualquer categoria cadastrada. O agente também aplica este filtro (`apply_transaction_filters` com `categoryName`).
 
 ## Campos e Regras do Modal de Lançamento (`modal:TX`)
 - **Tipo (`INCOME`, `EXPENSE`, `TRANSFER`):** Transferências exigem conta de origem e conta de destino diferentes.
@@ -31,3 +31,8 @@ tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferenci
 ## Pós-condições e Efeitos Colaterais
 - Criar uma despesa no cartão associa automaticamente à fatura (`CreditCardInvoice`) correta conforme o dia de fechamento do cartão.
 - Excluir um lançamento reverte imediatamente seu impacto no saldo da conta ou fatura.
+
+## O que o Agente IA pode fazer aqui
+- **Criar** lançamento (`create_transaction`): receita, despesa, **transferência** (conta de origem + destino), despesa em **cartão** (com `installments` de 1 a 48) e `status` PENDING/COMPLETED. Se a conta, o cartão ou a categoria citados **não existirem** (ou forem ambíguos), o agente recusa e lista as opções; nunca grava em outra conta por aproximação.
+- **Editar** (`update_transaction`) e **excluir** (`delete_transaction`) um lançamento localizado por ID ou por descrição (+ data/valor). Compras parceladas não são editadas pelo agente (apenas excluídas, com a série inteira); para editar parcelas use a tela de Extrato.
+- Sem categoria informada, o lançamento usa a categoria sugerida pelas regras aprendidas (memória de conciliação) ou fica **sem categoria** — o agente não escolhe uma categoria arbitrária.

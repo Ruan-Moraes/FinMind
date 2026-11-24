@@ -1,9 +1,9 @@
 ---
 docId: value-forecast
 module: forecast
-version: 1.1.0
+version: 1.2.0
 screens: ["forecast"]
-relatedTools: ["navigate_to_section", "query_forecasts_and_simulations", "upsert_value_forecast", "guide_feature_workflow", "capture_annotated_screen"]
+relatedTools: ["navigate_to_section", "query_forecasts_and_simulations", "upsert_value_forecast", "guide_feature_workflow", "capture_annotated_screen", "upsert_balance_target", "delete_value_forecast"]
 tags: ["previsao", "previsao de valor", "vou ganhar", "provavel gasto", "meta de saldo", "projecao", "futuro"]
 ---
 
@@ -21,3 +21,6 @@ tags: ["previsao", "previsao de valor", "vou ganhar", "provavel gasto", "meta de
 - Itens de previsão **não alteram** o saldo atual das contas bancárias nem o extrato real; eles alimentam exclusivamente a projeção futura.
 - Exclusões de eventos previstos ou metas de saldo sempre exigem confirmação prévia antes da remoção definitiva.
 - Datas devem estar em formato válido `YYYY-MM-DD` e valores devem ser maiores que R$ 0,00.
+
+## O que o Agente IA pode fazer aqui
+- Criar item de previsão (`upsert_value_forecast`), **excluir** item pelo título (`delete_value_forecast`) e criar/alterar **Meta de Saldo por Data** (`upsert_balance_target`). Todas exigem confirmação e podem ser desfeitas.

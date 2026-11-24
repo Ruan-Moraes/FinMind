@@ -1,9 +1,9 @@
 ---
 docId: accounts-and-cards
 module: accounts
-version: 1.1.0
+version: 1.2.0
 screens: ["accounts", "modal:ACCOUNT", "modal:CARD", "modal:PAY_INVOICE"]
-relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "query_financial_overview"]
+relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "query_financial_overview", "upsert_account", "upsert_credit_card", "pay_credit_card_invoice", "query_credit_card_invoices"]
 tags: ["conta", "carteira", "banco", "saldo", "cartao", "cartao de credito", "fatura", "limite", "fechamento", "vencimento"]
 ---
 
@@ -22,3 +22,7 @@ tags: ["conta", "carteira", "banco", "saldo", "cartao", "cartao de credito", "fa
 - Botão **Novo Cartão** (`accounts.btn.createCard`) abre o modal `openModalType: "CARD"`.
 - Campos: **Nome do Cartão** (`modal.card.input.name`), **Bandeira** (`modal.card.section.brand`), **Limite Total** (`modal.card.input.limit`), **Dia Fechamento** (`modal.card.input.closingDay`) e **Dia Vencimento** (`modal.card.input.dueDay`), confirmando em `modal.card.btn.submit`.
 - **Pagamento de Fatura:** Seleciona a conta pagadora e registra o pagamento da fatura mensal, atualizando o status da fatura para `PAID` e debitando o valor da conta escolhida.
+
+## O que o Agente IA pode fazer aqui
+- **Contas e cartões:** criar ou editar (informando o nome atual em `matchName`). Nomes duplicados são recusados. Arquivar/excluir contas e cartões **não** é feito pelo agente — use a tela.
+- **Faturas:** consultar (`query_credit_card_invoices`: mês, status, total, vencimento) e **pagar** (`pay_credit_card_invoice`) escolhendo a conta pagadora. O pagamento gera um lançamento de despesa na conta e marca a fatura como paga; ao desfazer, a fatura reabre e o lançamento é removido.

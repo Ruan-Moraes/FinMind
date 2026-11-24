@@ -1,7 +1,7 @@
 ---
 docId: errors-limits-and-recovery
 module: system
-version: 1.0.0
+version: 1.1.0
 screens: ["overview", "transactions", "goals", "accounts", "ai", "modal:SETTINGS"]
 relatedTools: ["navigate_to_section", "guide_feature_workflow"]
 tags: ["erro", "validacao", "recuperacao", "limite", "falha", "api", "chave", "duplicado"]
@@ -23,4 +23,5 @@ tags: ["erro", "validacao", "recuperacao", "limite", "falha", "api", "chave", "d
 ## Recuperação de Execução do Agente
 - Se o usuário interromper uma ação (`Esc` ou clique fora), nenhuma alteração não confirmada é salva.
 - Se uma mutação validada apresentar erro de banco ou validação, o agente reporta o erro real e mantém o estado íntegro sem declarar sucesso fictício.
-- Mutações `L2` concluídas podem ser revertidas pelo botão **Desfazer** usando o snapshot `beforeStateJson` da auditoria.
+- Ações concluídas do agente podem ser revertidas pelo botão **Desfazer** usando o snapshot `beforeStateJson` da auditoria. Criações são removidas; edições são restauradas; **exclusões são recriadas** (mesmos dados, novo identificador interno). Se o item já tiver sido usado depois (por exemplo, uma conta que já recebeu lançamentos), o desfazer pode ser recusado com uma explicação.
+- Se o agente não encontrar a conta, cartão, categoria, meta ou lançamento citado, ou achar mais de um candidato, ele **não grava nada** e pede para você especificar.

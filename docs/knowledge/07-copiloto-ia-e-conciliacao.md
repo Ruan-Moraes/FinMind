@@ -1,7 +1,7 @@
 ---
 docId: ai-copilot-and-reconciliation
 module: ai
-version: 1.1.0
+version: 1.2.0
 screens: ["ai", "modal:SANITY_CHECK"]
 relatedTools: ["navigate_to_section", "generate_financial_report", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["ia", "copiloto", "provedor", "openai", "gemini", "claude", "api key", "chave", "modelo", "extrato", "conciliacao", "diagnostico", "relatorio"]
@@ -21,3 +21,7 @@ tags: ["ia", "copiloto", "provedor", "openai", "gemini", "claude", "api key", "c
 3. **Diagnóstico de Status Financeiro & Plano de Ação IA (`ai.panel.healthReports`):**
    - Botão **Gerar Diagnóstico Agora** (`ai.btn.generateHealth`) gera e salva pareceres com nota de saúde financeira (0–100), pontos fortes, riscos e plano de ação.
    - Possui busca por texto, filtro por **data inicial e final**, faixa de nota (`Saudável`, `Atenção`, `Crítico`), provedor, ordenação e paginação (4 por página).
+
+## Histórico de ações do Agente
+- No fim da aba **Copiloto IA & Extrato** (`ai.panel.auditLog`) há o **Histórico de ações do Agente IA** com as últimas 20 ações (planejadas, executadas, canceladas, falhas e desfeitas).
+- O agente **não** gera nem lê os diagnósticos salvos do painel de saúde financeira; ele pode, porém, montar um relatório sob demanda no chat (`generate_financial_report`), que não é salvo no painel.

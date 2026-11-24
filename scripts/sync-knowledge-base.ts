@@ -1,5 +1,6 @@
 import { loadKnowledgeDocumentsFromDisk, syncSystemKnowledgeBase } from '@/features/ai-agent/knowledge/system-kb-sync';
 import { TOOL_RISK_POLICY } from '@/features/ai-agent/domain/agent-risk-policy';
+import { AGENT_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog';
 import { isKnownAgentTargetId } from '@/features/ai-agent/domain/agent-target-registry';
 
 async function main() {
@@ -16,6 +17,8 @@ async function main() {
     for (const tool of doc.frontmatter.relatedTools) {
       if (!Object.prototype.hasOwnProperty.call(TOOL_RISK_POLICY, tool)) {
         errors.push(`[${doc.filePath}] relatedTool desconhecida: "${tool}"`);
+      } else if (!AGENT_TOOL_DECLARATIONS.some((d) => d.name === tool)) {
+        errors.push(`[${doc.filePath}] relatedTool sem implementação (o agente não a recebe): "${tool}"`);
       }
     }
     const targetMatches = doc.chunks.flatMap((c) => {

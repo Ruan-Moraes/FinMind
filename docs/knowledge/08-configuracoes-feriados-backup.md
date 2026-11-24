@@ -1,7 +1,7 @@
 ---
 docId: settings-holidays-and-backup
 module: settings
-version: 1.1.0
+version: 1.2.0
 screens: ["modal:SETTINGS", "modal:HOLIDAYS", "modal:RESET"]
 relatedTools: ["open_settings", "update_user_preferences", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["configuracoes", "preferencias", "estado", "cidade", "feriados", "dias uteis", "ciclo mensal", "backup", "snapshot", "exportar", "reset"]
@@ -18,6 +18,9 @@ tags: ["configuracoes", "preferencias", "estado", "cidade", "feriados", "dias ut
 - **Modo Privacidade:** Iniciar com valores ocultos.
 - **Localização & Calendário de Feriados (Dias Úteis):**
   - Seletor pesquisável de **Estado (UF)** (`modal.settings.select.state`) e campo **Cidade** (`modal.settings.input.city`).
-  - Botão **Calendário de Feriados** (`modal.settings.btn.holidays`) abre o gerenciador completo para sincronizar feriados nacionais (BrasilAPI 2026–2028) + estaduais (27 UFs), buscar feriados municipais com IA ou cadastrar/ativar/excluir feriados manualmente.
+  - Botão **Calendário de Feriados** (`modal.settings.btn.holidays`) abre o gerenciador completo para sincronizar feriados nacionais (BrasilAPI) + estaduais (27 UFs) para o ano exibido e os anos de 2026 a 2028, buscar feriados municipais com IA ou cadastrar/ativar/excluir feriados manualmente.
 - **Exportação & Snapshot Completo:** Exportação CSV/JSON de transações (`/api/export`) e Snapshot completo pareado (`/api/snapshot`) para backup e restauração.
 - **Zona de Perigo (Limpar / Resetar):** Ação protegida por dupla confirmação exigindo o nome completo do usuário. **Bloqueada para execução autônoma pela IA.**
+
+## O que o Agente IA pode fazer aqui
+- Alterar tema, densidade, modo privacidade, início do ciclo mensal, Estado (UF) e Cidade (`update_user_preferences`). O agente **não** sincroniza feriados, não faz backup/restauração e não executa o reset; nesses casos ele apenas guia o usuário na tela.
