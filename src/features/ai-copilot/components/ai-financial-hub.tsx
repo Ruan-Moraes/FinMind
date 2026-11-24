@@ -10,6 +10,7 @@ import {
 } from '@/features/reconciliation/components/statement-reconciliation-workbench';
 import { AiProviderConnectorPanel } from '@/features/ai-copilot/components/ai-provider-connector-panel';
 import { FinancialHealthReportsPanel } from '@/features/ai-copilot/components/financial-health-reports-panel';
+import { AgentAuditLogPanel } from '@/features/ai-agent/components/agent-audit-log-panel';
 import { useAiFinancialHub } from '@/features/ai-copilot/hooks/use-ai-financial-hub';
 
 export type { SerializedImportBatch };
@@ -123,6 +124,7 @@ export function AiFinancialHub(props: AiFinancialHubProps) {
         handleGenerateStatusReport={handleGenerateStatusReport}
         setPendingDelete={setPendingDelete}
       />
+      <AgentAuditLogPanel />
       <Modal
         isOpen={Boolean(pendingDelete)}
         onClose={() => { if (!isDeleting) setPendingDelete(null); }}

@@ -66,6 +66,7 @@ export const AGENT_TARGET_REGISTRY = {
   'ai.panel.providers': { label: 'Conector de Provedores IA', tab: 'ai', sensitive: true },
   'ai.panel.reconciliation': { label: 'Conciliação Inteligente de Extratos', tab: 'ai' },
   'ai.panel.healthReports': { label: 'Diagnóstico de Status Financeiro IA', tab: 'ai' },
+  'ai.panel.auditLog': { label: 'Histórico de Ações do Agente IA', tab: 'ai' },
   'ai.btn.generateHealth': { label: 'Botão Gerar Diagnóstico Agora', tab: 'ai' },
 
   // Modais e Campos Chave
