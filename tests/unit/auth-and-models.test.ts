@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { signSessionJwt, verifySessionJwt } from '@/features/auth';
 import {
   buildDynamicModelDescriptor,
@@ -21,6 +21,25 @@ describe('Autenticação JWT, Roteamento Dinâmico de Modelos e Classificação 
     const payload = await verifySessionJwt(token);
     expect(payload?.userId).toBe('user-1');
     expect(payload?.email).toBe('ruan@finmind.app');
+  });
+
+  it('rejeita o segredo local e exige AUTH_SECRET em ambiente público', async () => {
+    const session = { userId: 'user-1', email: 'auth-test@finmind.local', name: 'Teste' };
+    vi.stubEnv('REQUIRE_AUTH', 'false');
+    vi.stubEnv('AUTH_SECRET', undefined);
+    vi.stubEnv('NEXTAUTH_SECRET', undefined);
+    try {
+      const localToken = await signSessionJwt(session);
+      vi.stubEnv('VERCEL', '1');
+      await expect(verifySessionJwt(localToken)).resolves.toBeNull();
+      await expect(signSessionJwt(session)).rejects.toThrow('AUTH_SECRET');
+
+      vi.stubEnv('AUTH_SECRET', 'apenas-um-segredo-de-teste-com-mais-de-32-caracteres');
+      await expect(verifySessionJwt(localToken)).resolves.toBeNull();
+      await expect(verifySessionJwt(await signSessionJwt(session))).resolves.toEqual(session);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('reconhece dinamicamente modelos atuais e futuros sem depender de lista estática', () => {

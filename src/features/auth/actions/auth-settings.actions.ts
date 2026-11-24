@@ -4,6 +4,11 @@ import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
 import {
+  isPublicAuthRequired,
+  isStrongAdminPassword,
+  requirePublicAuthSecret,
+} from '@/features/auth/domain/access-policy';
+import {
   createSessionCookie,
   clearSessionCookie,
   ensurePersonalUserInitialized,
@@ -22,16 +27,15 @@ export async function loginAction(formData: FormData) {
   const email = String(formData.get('email') || '').toLowerCase().trim();
   const password = String(formData.get('password') || '');
 
+  const invalidCredentials = { ok: false, error: 'E-mail ou senha incorretos.' };
+  if (isPublicAuthRequired()) {
+    requirePublicAuthSecret();
+    if (!isStrongAdminPassword(password)) return invalidCredentials;
+  }
+
   const user = await ensurePersonalUserInitialized();
-
-  if (email !== user.email.toLowerCase()) {
-    return { ok: false, error: 'Credenciais inválidas para o usuário exclusivo.' };
-  }
-
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) {
-    return { ok: false, error: 'Senha incorreta.' };
-  }
+  const validPassword = await bcrypt.compare(password, user.passwordHash);
+  if (!validPassword || email !== user.email) return invalidCredentials;
 
   await createSessionCookie({
     userId: user.id,

@@ -32,7 +32,7 @@ test.describe('E2E: Persistência de Configurações & Fluxo Completo de Logout/
 
     await page.locator('#login-password').fill('senha-incorreta-e2e');
     await page.getByRole('button', { name: /Entrar no Painel Financeiro/i }).click();
-    await expect(page.getByText(/Senha incorreta/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/E-mail ou senha incorretos/i)).toBeVisible({ timeout: 10000 });
 
     // Login válido usando a senha configurada no ambiente
     const validPass = process.env.ADMIN_PASSWORD || 'admin123';

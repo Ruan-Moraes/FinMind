@@ -3,3 +3,6 @@ allowBuilds:
   '@prisma/engines': true
   esbuild: true
   prisma: true
+
+overrides:
+  'next>postcss': 8.5.33

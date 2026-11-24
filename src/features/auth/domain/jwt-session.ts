@@ -1,4 +1,5 @@
 import { SignJWT, jwtVerify } from 'jose';
+import { isPublicAuthRequired, requirePublicAuthSecret } from './access-policy';
 
 export const SESSION_COOKIE = 'finmind_session';
 export const LOGGED_OUT_COOKIE = 'finmind_logged_out';
@@ -11,10 +12,11 @@ export interface SessionPayload {
 
 export function getJwtSecretKey(explicitSecret?: string): Uint8Array {
   const rawSecret =
-    explicitSecret ||
-    process.env.AUTH_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    'finmind-personal-hmac-sha256-session-key';
+    explicitSecret || (isPublicAuthRequired()
+      ? requirePublicAuthSecret()
+      : process.env.AUTH_SECRET ||
+        process.env.NEXTAUTH_SECRET ||
+        'finmind-personal-hmac-sha256-session-key');
   return new TextEncoder().encode(rawSecret);
 }
 
@@ -42,8 +44,11 @@ export async function verifySessionJwt(
 ): Promise<SessionPayload | null> {
   if (!token || !token.trim()) return null;
   try {
-    const { payload } = await jwtVerify(token, getJwtSecretKey(explicitSecret));
-    if (!payload.userId) return null;
+    const { payload } = await jwtVerify(token, getJwtSecretKey(explicitSecret), {
+      algorithms: ['HS256'],
+      requiredClaims: ['exp'],
+    });
+    if (typeof payload.userId !== 'string' || !payload.userId) return null;
     return {
       userId: String(payload.userId),
       email: String(payload.email || ''),

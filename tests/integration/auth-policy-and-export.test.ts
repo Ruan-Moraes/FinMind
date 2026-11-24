@@ -71,7 +71,7 @@ describe('Integração SQLite: Política de Acesso Público & Exportação CSV/J
     expect(isPublicAuthRequired({})).toBe(false);
     expect(isPublicAuthRequired({ VERCEL: '1' })).toBe(true);
     expect(isPublicAuthRequired({ REQUIRE_AUTH: 'true' })).toBe(true);
-    expect(isPublicAuthRequired({ VERCEL: '1', REQUIRE_AUTH: 'false' })).toBe(false);
+    expect(isPublicAuthRequired({ VERCEL: '1', REQUIRE_AUTH: 'false' })).toBe(true);
   });
 
   it('requireAuthenticatedUser e /api/export bloqueiam acesso sem sessão quando REQUIRE_AUTH=true', async () => {

@@ -6,11 +6,21 @@
 export function isPublicAuthRequired(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  if (env.REQUIRE_AUTH === 'false') {
-    return false;
+  if (env.VERCEL === '1' || env.NETLIFY === 'true') return true;
+  if (env.REQUIRE_AUTH !== undefined) return env.REQUIRE_AUTH !== 'false';
+  return env.NODE_ENV === 'production';
+}
+
+export function requirePublicAuthSecret(): string {
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (!secret || secret.length < 32 || secret === 'troque-por-um-segredo-forte-de-32-bytes') {
+    throw new Error('Configure AUTH_SECRET com um segredo aleatório de pelo menos 32 caracteres.');
   }
-  if (env.REQUIRE_AUTH === 'true') {
-    return true;
-  }
-  return env.VERCEL === '1';
+  return secret;
+}
+
+export function isStrongAdminPassword(password: string): boolean {
+  return password.trim().length >= 16 &&
+    new TextEncoder().encode(password).length <= 72 &&
+    password !== 'troque-por-uma-senha-forte';
 }

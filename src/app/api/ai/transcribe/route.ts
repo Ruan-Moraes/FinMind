@@ -20,8 +20,7 @@ async function transcribeWithOpenAiWhisper(file: File, apiKey: string): Promise<
       body: form,
     });
     if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(`OpenAI Whisper HTTP ${res.status}: ${err?.error?.message || res.statusText}`);
+      throw new Error(`OpenAI Whisper HTTP ${res.status}`);
     }
     const data = (await res.json()) as { text?: string };
     return String(data.text || '').trim();
@@ -60,8 +59,7 @@ async function transcribeWithGeminiAudio(file: File, apiKey: string, model: stri
       }),
     });
     if (!res.ok) {
-      const err = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-      throw new Error(`Gemini Audio HTTP ${res.status}: ${err?.error?.message || res.statusText}`);
+      throw new Error(`Gemini Audio HTTP ${res.status}`);
     }
     const data = (await res.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
@@ -141,9 +139,9 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true, transcript, providerUsed });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
-      { ok: false, error: err instanceof Error ? err.message : 'Erro ao transcrever o áudio.' },
+      { ok: false, error: 'O provedor não conseguiu transcrever o áudio. Verifique a conexão de IA e tente novamente.' },
       { status: 502 }
     );
   }

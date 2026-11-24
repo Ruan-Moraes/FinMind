@@ -28,6 +28,8 @@ export function LoginView({ defaultEmail }: { defaultEmail: string }) {
       } else {
         router.refresh();
       }
+    } catch {
+      setError('Não foi possível entrar. Tente novamente.');
     } finally {
       setLoading(false);
     }

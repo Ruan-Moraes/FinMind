@@ -46,9 +46,11 @@ describe('Núcleo Puro: ActionResult, Criptografia IV Único, Moeda BRL & Polít
     expect(formatCentsToBRL(999999, true)).toBe('R$ ••••••');
   });
 
-  it('isPublicAuthRequired respeita precedência explícita sobre flag VERCEL', () => {
-    expect(isPublicAuthRequired({ VERCEL: '1' })).toBe(true);
-    expect(isPublicAuthRequired({ VERCEL: '1', REQUIRE_AUTH: 'false' })).toBe(false);
+  it('exige autenticação em produção e não permite desativá-la na Vercel ou Netlify', () => {
+    expect(isPublicAuthRequired({ VERCEL: '1', REQUIRE_AUTH: 'false' })).toBe(true);
+    expect(isPublicAuthRequired({ NETLIFY: 'true', REQUIRE_AUTH: 'false' })).toBe(true);
+    expect(isPublicAuthRequired({ NODE_ENV: 'production' })).toBe(true);
+    expect(isPublicAuthRequired({ NODE_ENV: 'production', REQUIRE_AUTH: 'false' })).toBe(false);
     expect(isPublicAuthRequired({ VERCEL: '0', REQUIRE_AUTH: 'true' })).toBe(true);
     expect(isPublicAuthRequired({})).toBe(false);
   });

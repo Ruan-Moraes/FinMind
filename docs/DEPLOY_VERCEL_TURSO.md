@@ -1,93 +1,49 @@
-# Guia de Deploy Custo Zero — Vercel + Turso (libSQL)
+# Publicação gratuita do FinMind com Vercel e Turso
 
-Este guia descreve o passo a passo exato para publicar o **FinMind** em produção com custo **R\$ 0,00/mês**, utilizando:
-- **Hospedagem Serverless:** [Vercel](https://vercel.com) (Hobby Tier gratuito)
-- **Banco de Dados Relacional:** [Turso](https://turso.tech) (libSQL / SQLite Edge — Starter Tier gratuito)
+Use [Vercel Hobby](https://vercel.com/docs/plans/hobby) para o app Next.js de uso pessoal e não comercial e [Turso Free](https://turso.tech/pricing) para o banco libSQL. O repositório do GitHub pode ser privado e pertencer à sua conta pessoal. Use o endereço HTTPS `*.vercel.app` fornecido pelo deploy. O Turso Free inclui 5 GB de armazenamento, 500 milhões de linhas lidas e 10 milhões de linhas escritas por mês. A disponibilidade depende das cotas dos planos.
 
----
+## 1. Preparar o banco
 
-## 1. Pré-requisitos Locais
-- `pnpm` (v12+) instalado
-- Repositório Git enviado para o GitHub (branch `main`)
-- Conta gratuita no **Turso** e na **Vercel**
+Crie um banco dedicado ao FinMind no [Turso](https://app.turso.tech). Na linha de comando, use `turso auth login`, `turso db create finmind-prod`, `turso db show finmind-prod --url` e `turso db tokens create finmind-prod`. Guarde o token em um gerenciador de senhas.
 
----
+Defina `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` em um arquivo `.env` local ignorado pelo Git ou injete-os de um gerenciador de segredos. Confira o banco de destino e execute:
 
-## 2. Criar o Banco Gratuito no Turso (libSQL)
-
-Instale a CLI do Turso (ou crie pelo painel web em [app.turso.tech](https://app.turso.tech)):
-
-```bash
-# 1. Login no Turso
-turso auth login
-
-# 2. Criar banco gratuito (região mais próxima, ex: gru = São Paulo)
-turso db create finmind-prod --location gru
-
-# 3. Obter a URL libSQL (copie o resultado: libsql://finmind-prod-xxx.turso.io)
-turso db show finmind-prod --url
-
-# 4. Gerar token de autenticação (copie o JWT gerado)
-turso db tokens create finmind-prod
-```
-
----
-
-## 3. Sincronizar o Schema Prisma no Turso
-
-Como o comando `prisma db push` nativo não opera diretamente sobre URLs `libsql://`, o FinMind inclui o script idempotente `scripts/push-turso-schema.mjs` (`pnpm db:push:turso`):
-
-```bash
-# Testar geração do DDL sem alterar nada no banco remoto
+```sh
 pnpm db:push:turso --dry-run
-
-# Aplicar as 19 tabelas e índices no banco remoto Turso
-TURSO_DATABASE_URL="libsql://finmind-prod-xxx.turso.io" \
-TURSO_AUTH_TOKEN="seu-token-turso" \
 pnpm db:push:turso
 ```
 
-> **Seguro para reexecutar:** todos os comandos são convertidos para `CREATE TABLE IF NOT EXISTS` e `CREATE INDEX IF NOT EXISTS`.
+O primeiro comando valida a geração do SQL. O segundo aplica o schema ao banco selecionado. Para levar dados locais ao novo banco, use o snapshot pela interface depois de verificar o login em produção.
 
----
+## 2. Configurar a Vercel
 
-## 4. Publicar na Vercel
+1. Importe [Ruan-Moraes/FinMind](https://github.com/Ruan-Moraes/FinMind) em [vercel.com/new](https://vercel.com/new) na conta pessoal Hobby. Use a branch de produção `main` e o preset Next.js.
+2. As etapas de instalação e build usam a versão do pnpm fixada em `vercel.json`. Selecione Node.js 22.x, usado também no CI.
+3. Configure estas variáveis no escopo **Production** antes do primeiro deploy.
 
-1. Acesse [vercel.com/new](https://vercel.com/new) e importe seu repositório GitHub do **FinMind**.
-2. O arquivo `vercel.json` já configura automaticamente:
-   - **Framework:** Next.js
-   - **Install Command:** `pnpm install --frozen-lockfile`
-   - **Build Command:** `pnpm build`
-3. Configure as seguintes **Environment Variables** na Vercel:
+| Variável | Valor |
+| --- | --- |
+| `TURSO_DATABASE_URL` | URL `libsql://…` do banco de produção |
+| `TURSO_AUTH_TOKEN` | Token com acesso ao banco de produção. Tipo **Secret** |
+| `AUTH_SECRET` | Gere um valor exclusivo com `openssl rand -base64 32`. Tipo **Secret** |
+| `ADMIN_EMAIL` | Seu e-mail de login |
+| `ADMIN_PASSWORD` | Senha única gerada pelo gerenciador. Use pelo menos 16 caracteres e no máximo 72 bytes. Tipo **Secret** |
+| `ADMIN_NAME` | Seu nome, usado também na confirmação de reset |
+| `REQUIRE_AUTH` | `true`. Na Vercel o login é obrigatório mesmo se essa variável estiver ausente |
 
-| Variável | Obrigatória | Exemplo / Como gerar |
-| :--- | :---: | :--- |
-| `TURSO_DATABASE_URL` | Sim | `libsql://finmind-prod-xxx.turso.io` |
-| `TURSO_AUTH_TOKEN` | Sim | Token gerado via `turso db tokens create` |
-| `AUTH_SECRET` | Sim | Gere com `openssl rand -base64 32` |
-| `REQUIRE_AUTH` | Sim | `true` (garante tela de login obrigatória em URL pública) |
-| `ADMIN_EMAIL` | Sim | Seu e-mail de acesso |
-| `ADMIN_PASSWORD` | Sim | Senha forte para login em produção |
-| `ADMIN_NAME` | Sim | Seu nome completo (também usado na dupla confirmação de reset) |
-| `OPENAI_API_KEY` | Não | Opcional (pode configurar pela interface em *Copiloto IA*) |
-| `GEMINI_API_KEY` | Não | Opcional (pode configurar pela interface em *Copiloto IA*) |
-| `ANTHROPIC_API_KEY` | Não | Opcional (pode configurar pela interface em *Copiloto IA*) |
+Use o [tipo Secret da Vercel](https://vercel.com/changelog/environment-variables-now-use-config-and-secret-types) também para qualquer chave de IA que você decidir configurar. Mantenha credenciais fora do Git, de variáveis `NEXT_PUBLIC_*` e dos ambientes de Preview. Para testar previews, configure um banco separado e segredos próprios.
 
-4. Clique em **Deploy**.
+O primeiro login provisiona a conta se o e-mail ainda estiver ausente no banco. A senha passa a ser validada pelo hash armazenado no banco. Alterar `ADMIN_PASSWORD` no painel depois disso **não** troca a senha da conta existente. Mantenha `AUTH_SECRET` estável. Sua troca invalida sessões e exige recadastrar chaves de IA que tenham sido cifradas com o valor anterior.
 
----
+## 3. Verificar o primeiro deploy
 
-## 5. Como o Banco Troca Automaticamente (Local vs Produção)
+1. No [Firewall da Vercel](https://vercel.com/docs/vercel-firewall/vercel-waf/rate-limiting), configure a regra gratuita de limite por IP para `POST /`, usada pelo login e pelas ações do painel. Um ponto de partida é 30 requisições por minuto, com resposta 429.
+2. Abra o endereço `*.vercel.app` em janela anônima. A página inicial deve pedir e-mail e senha. As rotas `/api/export?format=json`, `/api/snapshot` e `/api/ai/providers/state` devem responder 401 sem sessão.
+3. Tente uma senha incorreta. Depois, entre com a conta de produção, confira o painel e encerre a sessão. Verifique que a tela de login volta e que as rotas privadas voltam a responder 401.
+4. Para migrar dados, exporte o snapshot na instância local em **Configurações → Snapshot Completo** e importe na instância autenticada. Guarde o arquivo em local privado.
 
-Em [src/shared/lib/prisma.ts](../src/shared/lib/prisma.ts):
-- **Desenvolvimento local / CI:** quando `TURSO_DATABASE_URL` está vazio, o Prisma usa o SQLite local (`DATABASE_URL="file:./dev.db"`).
-- **Produção na Vercel:** quando `TURSO_DATABASE_URL` está preenchido, o Prisma instancia automaticamente `PrismaLibSQL({ url, authToken })` de `@prisma/adapter-libsql`.
+## Limites que afetam o uso
 
----
-
-## 6. Migrar seus Dados Locais para a Produção (Snapshot em 1 Clique)
-
-Você pode levar 100% dos seus dados locais para a versão publicada na Vercel sem SQL manual:
-1. No FinMind **local**, abra **Configurações → Snapshot Completo → Exportar Snapshot** (`finmind-snapshot-AAAA-MM-DD.json`).
-2. Na URL publicada da **Vercel**, faça login com suas credenciais `ADMIN_*`.
-3. Abra **Configurações → Snapshot Completo → Importar Snapshot**, selecione o arquivo exportado e confirme em **Confirmar e Parear Dados**.
+- Na Vercel Hobby, cada requisição enviada a uma Function tem limite de [4,5 MB](https://vercel.com/docs/functions/limitations#request-body-size), incluindo codificação e metadados. Divida lotes de extratos e confirme o tamanho dos snapshots antes de tentar restaurá-los. O limite se aplica também ao áudio do copiloto e ao tamanho de downloads sem streaming.
+- As funções de IA externa são opcionais. Para manter custo zero e evitar enviar informações financeiras a provedores externos, deixe as chaves de IA em branco.
+- Caso precise mudar de hospedagem, [Netlify Free](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/credit-based-pricing-plans/) suporta [Next.js com Server Actions](https://docs.netlify.com/build/frameworks/framework-setup-guides/nextjs/overview/) e oferece 300 créditos mensais com limite rígido. O build precisa ser validado separadamente.

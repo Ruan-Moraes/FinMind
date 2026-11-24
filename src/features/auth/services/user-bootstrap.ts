@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
 import { getSession, isSessionExplicitlyLoggedOut } from '@/features/auth/services/session-cookies';
-import { isPublicAuthRequired } from '@/features/auth/domain/access-policy';
+import { isPublicAuthRequired, isStrongAdminPassword } from '@/features/auth/domain/access-policy';
+import type { SessionPayload } from '@/features/auth/domain/jwt-session';
 import { decryptSecret } from '@/features/auth/domain/secret-crypto';
 
 const LEGACY_SIMULATED_TOKEN_PREFIX = 'sso_popup_token::';
@@ -31,9 +32,13 @@ function withDecryptedSettings<
  * Inicializa a estrutura base do usuário e higieniza eventuais configurações legadas/simuladas.
  */
 export async function ensurePersonalUserInitialized() {
-  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@finmind.app').toLowerCase().trim();
+  const publicAuth = isPublicAuthRequired();
+  const configuredEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  if (publicAuth && (!configuredEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuredEmail))) {
+    throw new Error('Configure ADMIN_EMAIL para a conta do FinMind.');
+  }
+  const adminEmail = configuredEmail || 'admin@finmind.app';
   const adminName = process.env.ADMIN_NAME || 'Administrador FinMind';
-  const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
 
   let user = await prisma.user.findUnique({
     where: { email: adminEmail },
@@ -41,6 +46,10 @@ export async function ensurePersonalUserInitialized() {
   });
 
   if (!user) {
+    const adminPass = process.env.ADMIN_PASSWORD || (publicAuth ? '' : 'admin123');
+    if (publicAuth && !isStrongAdminPassword(adminPass)) {
+      throw new Error('Configure ADMIN_PASSWORD com uma senha de pelo menos 16 caracteres e até 72 bytes.');
+    }
     const passwordHash = await bcrypt.hash(adminPass, 10);
     user = await prisma.user.create({
       data: {
@@ -108,33 +117,27 @@ export async function ensurePersonalUserInitialized() {
   return withDecryptedSettings(user);
 }
 
+export async function findSessionUser(session: SessionPayload | null) {
+  if (!session) return null;
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: { settings: true },
+  });
+  return user ? withDecryptedSettings(user) : null;
+}
+
 /**
- * Resolve o usuário autenticado da sessão ativa (garantindo isolamento por userId e bloqueio após logout).
+ * Resolve o usuário autenticado da sessão ativa e bloqueia acesso após logout.
  */
-export async function requireAuthenticatedUser(explicitUserId?: string) {
-  if (explicitUserId) {
-    const found = await prisma.user.findUnique({
-      where: { id: explicitUserId },
-      include: { settings: true },
-    });
-    if (found) return withDecryptedSettings(found);
-  }
+export async function requireAuthenticatedUser() {
 
   const loggedOut = await isSessionExplicitlyLoggedOut();
   if (loggedOut) {
     throw new Error('Sessão encerrada. Faça login novamente para acessar seus dados financeiros.');
   }
 
-  const session = await getSession();
-  if (session?.userId) {
-    const sessionUser = await prisma.user.findUnique({
-      where: { id: session.userId },
-      include: { settings: true },
-    });
-    if (sessionUser) {
-      return withDecryptedSettings(sessionUser);
-    }
-  }
+  const user = await findSessionUser(await getSession());
+  if (user) return user;
 
   if (isPublicAuthRequired()) {
     throw new Error('Autenticação obrigatória. Faça login para acessar seus dados financeiros.');

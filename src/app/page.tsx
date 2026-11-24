@@ -5,6 +5,7 @@ import {
   isPublicAuthRequired,
   isSessionExplicitlyLoggedOut,
 } from '@/features/auth';
+import { findSessionUser } from '@/features/auth/services/user-bootstrap';
 import { loadSerializedDashboardData } from '@/features/analytics/services/dashboard-data-loader';
 import { FinMindWorkbench } from '@/features/dashboard/components/finmind-workbench';
 import { LoginView } from '@/features/auth/components/login-view';
@@ -30,14 +31,15 @@ export default async function HomePage({ searchParams }: PageProps) {
     isSessionExplicitlyLoggedOut(),
   ]);
 
-  if (loggedOut || (publicAuthRequired && !session?.userId)) {
-    const defaultEmail = publicAuthRequired
-      ? ''
-      : (await ensurePersonalUserInitialized()).email;
+  if (loggedOut) {
+    const defaultEmail = publicAuthRequired ? '' : (await ensurePersonalUserInitialized()).email;
     return <LoginView defaultEmail={defaultEmail} />;
   }
 
-  const user = await ensurePersonalUserInitialized();
+  const user = publicAuthRequired
+    ? await findSessionUser(session)
+    : await ensurePersonalUserInitialized();
+  if (!user) return <LoginView defaultEmail="" />;
 
   const workbenchProps = await loadSerializedDashboardData({
     user,

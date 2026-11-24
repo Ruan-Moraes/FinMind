@@ -21,6 +21,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'pnpm start -p 3123',
+    env: { REQUIRE_AUTH: process.env.REQUIRE_AUTH ?? 'false' },
     url: 'http://localhost:3123',
     reuseExistingServer: !process.env.CI,
     timeout: 60000,

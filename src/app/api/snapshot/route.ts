@@ -35,6 +35,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: message }, { status: 401 });
   }
 
+  const contentType = request.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+  if (contentType !== 'application/json') {
+    return NextResponse.json({ ok: false, error: 'Envie um snapshot em JSON.' }, { status: 415 });
+  }
+
   let payload: unknown;
   try {
     payload = await request.json();

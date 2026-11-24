@@ -1,12 +1,15 @@
 import crypto from 'node:crypto';
+import { isPublicAuthRequired, requirePublicAuthSecret } from './access-policy';
 
 const ENCRYPTED_PREFIX = 'enc:v1:';
 
 function deriveEncryptionKey(): Buffer {
   const secret =
-    process.env.AUTH_SECRET ||
-    process.env.JWT_SECRET ||
-    'finmind-local-development-secret-key-do-not-use-in-prod';
+    isPublicAuthRequired()
+      ? requirePublicAuthSecret()
+      : process.env.AUTH_SECRET ||
+        process.env.JWT_SECRET ||
+        'finmind-local-development-secret-key-do-not-use-in-prod';
   return crypto.createHash('sha256').update(secret, 'utf8').digest();
 }
 
