@@ -116,31 +116,36 @@ export function GoalAndBudgetModals() {
             </FormField>
 
             <FormField label="Mês Alvo">
-              <Select
-                value={goalMonth}
-                onChange={(e) => setGoalMonth(Number(e.target.value))}
-              >
-                {MONTH_NAMES_PT.map((m, idx) => (
-                  <option key={m} value={idx + 1}>
-                    {m}
-                  </option>
-                ))}
-              </Select>
+              <div data-agent-id="modal.goal.select.month">
+                <Select
+                  value={goalMonth}
+                  onChange={(e) => setGoalMonth(Number(e.target.value))}
+                >
+                  {MONTH_NAMES_PT.map((m, idx) => (
+                    <option key={m} value={idx + 1}>
+                      {m}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </FormField>
 
             <FormField label="Ano Alvo">
-              <Select value={goalYear} onChange={(e) => setGoalYear(Number(e.target.value))}>
-                {[selectedYear, selectedYear + 1, selectedYear + 2].map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </Select>
+              <div data-agent-id="modal.goal.input.year">
+                <Select value={goalYear} onChange={(e) => setGoalYear(Number(e.target.value))}>
+                  {[selectedYear, selectedYear + 1, selectedYear + 2].map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </FormField>
           </div>
 
           <FormField label="Observações (Opcional)">
             <Input
+              data-agent-id="modal.goal.input.notes"
               placeholder="Ex: Reserva de segurança intocável"
               value={goalNotes}
               onChange={(e) => setGoalNotes(e.target.value)}
@@ -158,14 +163,20 @@ export function GoalAndBudgetModals() {
             <Button variant="secondary" onClick={closeModal}>
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" form="form-budget" isLoading={isSubmitting}>
+            <Button
+              data-agent-id="modal.budget.btn.submit"
+              variant="primary"
+              type="submit"
+              form="form-budget"
+              isLoading={isSubmitting}
+            >
               Salvar Limite
             </Button>
           </>
         }
       >
         <form id="form-budget" onSubmit={handleSaveBudget} className="space-y-4">
-          <div className="space-y-2">
+          <div data-agent-id="modal.budget.section.category" className="space-y-2">
             <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
               Selecione a Categoria de Despesa
             </label>
@@ -200,6 +211,7 @@ export function GoalAndBudgetModals() {
 
           <FormField label="Teto Máximo no Mês (R$)">
             <Input
+              data-agent-id="modal.budget.input.limit"
               tabular
               prefixText="R$"
               value={budgetMax}

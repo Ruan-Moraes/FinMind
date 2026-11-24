@@ -27,13 +27,13 @@ import { SettingsModal } from '@/features/dashboard/components/settings-modal';
 import { SecurityAndPreviewModals } from '@/features/dashboard/components/security-and-preview-modals';
 import { AgentRuntimeProvider } from '@/features/ai-agent/context/agent-runtime-context';
 import { AgentVisualStage } from '@/features/ai-agent/visual/agent-visual-stage';
+import { AiProvidersProvider } from '@/features/ai-copilot/context/ai-providers-context';
 
 export type { SerializedTransaction, WorkbenchProps };
 
 export function FinMindWorkbench(props: WorkbenchProps) {
   const wb = useWorkbenchController(props);
   const {
-    settings,
     aiReports,
     categories,
     creditCards,
@@ -55,6 +55,7 @@ export function FinMindWorkbench(props: WorkbenchProps) {
 
   return (
     <WorkbenchProvider props={props} wb={wb}>
+    <AiProvidersProvider initialState={props.initialAiState}>
     <AgentRuntimeProvider>
     <div data-agent-capture-root="true" className="min-h-screen bg-white dark:bg-zinc-950 text-slate-900 dark:text-zinc-50 flex flex-col pb-20 sm:pb-8">
       <WorkbenchHeader />
@@ -93,16 +94,6 @@ export function FinMindWorkbench(props: WorkbenchProps) {
 
         {activeTab === 'ai' && (
           <AiFinancialHub
-            aiSettings={{
-              aiProvider: settings.aiProvider,
-              aiConnectionMode: settings.aiConnectionMode,
-              openaiApiKey: settings.openaiApiKey,
-              geminiApiKey: settings.geminiApiKey,
-              claudeApiKey: settings.claudeApiKey,
-              openaiModel: settings.openaiModel,
-              geminiModel: settings.geminiModel,
-              claudeModel: settings.claudeModel,
-            }}
             categories={categories}
             accounts={activeAccounts}
             creditCards={creditCards}
@@ -146,6 +137,7 @@ export function FinMindWorkbench(props: WorkbenchProps) {
       <AgentVisualStage />
     </div>
     </AgentRuntimeProvider>
+    </AiProvidersProvider>
     </WorkbenchProvider>
   );
 }

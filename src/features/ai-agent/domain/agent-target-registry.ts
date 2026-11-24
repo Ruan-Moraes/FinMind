@@ -33,12 +33,18 @@ export const AGENT_TARGET_REGISTRY = {
 
   // Metas & Custos Estáticos
   'goals.section.goals': { label: 'Seção Metas de Carteira', tab: 'goals' },
+  'goals.section.combined': { label: 'Metas Juntas & Simulador', tab: 'goals' },
   'goals.btn.create': { label: 'Botão Definir Meta de Carteira', tab: 'goals' },
   'goals.section.staticRules': { label: 'Seção Custos e Ganhos Estáticos', tab: 'goals' },
+  'goals.table.staticRules': { label: 'Tabela Regras Fixas Mensais', tab: 'goals' },
   'goals.btn.createIncomeRule': { label: 'Botão Novo Ganho Estático', tab: 'goals' },
   'goals.btn.createExpenseRule': { label: 'Botão Novo Custo Estático', tab: 'goals' },
+  'goals.section.budgets': { label: 'Seção Limites de Gastos por Categoria', tab: 'goals' },
   'goals.btn.createBudget': { label: 'Botão Novo Orçamento Mensal', tab: 'goals' },
+  'goals.section.categories': { label: 'Seção Categorias Personalizadas', tab: 'goals' },
   'goals.btn.createCategory': { label: 'Botão Nova Categoria', tab: 'goals' },
+  'goals.btn.createExpenseCategory': { label: 'Botão Nova Categoria de Gasto', tab: 'goals' },
+  'goals.btn.createIncomeCategory': { label: 'Botão Nova Categoria de Ganho', tab: 'goals' },
 
   // Previsão de Valor
   'forecast.btn.addIncome': { label: 'Botão Vou Ganhar', tab: 'forecast' },
@@ -72,13 +78,42 @@ export const AGENT_TARGET_REGISTRY = {
 
   'modal.staticRule.input.description': { label: 'Descrição da Regra Fixa', modal: 'STATIC_RULE' },
   'modal.staticRule.input.amount': { label: 'Valor da Regra Fixa', modal: 'STATIC_RULE' },
+  'modal.staticRule.section.dueDate': { label: 'Vencimento & Dia Útil da Regra', modal: 'STATIC_RULE' },
   'modal.staticRule.btn.submit': { label: 'Salvar Regra Fixa', modal: 'STATIC_RULE' },
+
+  'modal.category.input.name': { label: 'Nome da Categoria', modal: 'CATEGORY' },
+  'modal.category.section.type': { label: 'Tipo da Categoria (Despesa/Receita)', modal: 'CATEGORY' },
+  'modal.category.section.nature': { label: 'Natureza Padrão (Fixo/Variável)', modal: 'CATEGORY' },
+  'modal.category.section.icon': { label: 'Ícone da Categoria', modal: 'CATEGORY' },
+  'modal.category.section.color': { label: 'Cor da Categoria', modal: 'CATEGORY' },
+  'modal.category.btn.submit': { label: 'Criar ou Salvar Categoria', modal: 'CATEGORY' },
+
+  'modal.budget.section.category': { label: 'Categoria do Limite Mensal', modal: 'BUDGET' },
+  'modal.budget.input.limit': { label: 'Teto Máximo no Mês (R$)', modal: 'BUDGET' },
+  'modal.budget.btn.submit': { label: 'Salvar Limite Mensal', modal: 'BUDGET' },
+
+  'modal.account.input.name': { label: 'Nome da Conta', modal: 'ACCOUNT' },
+  'modal.account.section.type': { label: 'Tipo de Conta / Carteira', modal: 'ACCOUNT' },
+  'modal.account.input.initialBalance': { label: 'Saldo Inicial da Conta', modal: 'ACCOUNT' },
+  'modal.account.btn.submit': { label: 'Criar ou Salvar Conta', modal: 'ACCOUNT' },
+
+  'modal.card.input.name': { label: 'Nome do Cartão', modal: 'CARD' },
+  'modal.card.section.brand': { label: 'Bandeira do Cartão', modal: 'CARD' },
+  'modal.card.input.limit': { label: 'Limite Total do Cartão', modal: 'CARD' },
+  'modal.card.input.closingDay': { label: 'Dia de Fechamento da Fatura', modal: 'CARD' },
+  'modal.card.input.dueDay': { label: 'Dia de Vencimento da Fatura', modal: 'CARD' },
+  'modal.card.btn.submit': { label: 'Salvar Cartão', modal: 'CARD' },
 
   'modal.tx.input.amount': { label: 'Valor do Lançamento', modal: 'TX' },
   'modal.tx.input.description': { label: 'Descrição do Lançamento', modal: 'TX' },
   'modal.tx.input.date': { label: 'Data do Lançamento', modal: 'TX' },
   'modal.tx.btn.submit': { label: 'Salvar Lançamento', modal: 'TX' },
 
+  'modal.settings.section.theme': { label: 'Seção Aparência da Interface', modal: 'SETTINGS' },
+  'modal.settings.section.preferences': { label: 'Seção Preferências Operacionais', modal: 'SETTINGS' },
+  'modal.settings.section.privacy': { label: 'Seção Modo Privacidade', modal: 'SETTINGS' },
+  'modal.settings.section.holidays': { label: 'Seção Localização & Feriados', modal: 'SETTINGS' },
+  'modal.settings.section.backup': { label: 'Seção Exportação & Backup Snapshot', modal: 'SETTINGS' },
   'modal.settings.fiscalDay': { label: 'Início do Ciclo Mensal', modal: 'SETTINGS' },
   'modal.settings.select.state': { label: 'Estado (UF) para Feriados', modal: 'SETTINGS' },
   'modal.settings.input.city': { label: 'Cidade para Feriados', modal: 'SETTINGS' },

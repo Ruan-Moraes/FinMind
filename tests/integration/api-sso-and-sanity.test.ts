@@ -1,102 +1,99 @@
-import { describe, it, expect } from 'vitest';
-import { NextRequest } from 'next/server';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { prisma } from '@/shared/lib/prisma';
+import { encryptSecret } from '@/features/auth/domain/secret-crypto';
 import {
-  handleSsoStatusGet,
-  handleSsoAuthenticateOrRevokePost,
-} from '@/features/auth/services/sso-api-handlers';
-import {
-  handleSanityCheckGet,
-  handleSanityCheckPost,
-} from '@/features/ai-copilot/providers/sanity-check-api-handlers';
+  resolveActiveUserAiSelection,
+  resolveUserProviderCredentials,
+} from '@/features/ai-copilot/services/ai-credentials-service';
+import { buildAuthoritativeGlobalAiState } from '@/features/ai-copilot/services/ai-provider-state-service';
+import { executeModelSanityCheck } from '@/features/ai-copilot/providers/sanity-check-runner';
 
-describe('Integração API Routes: /api/sso e /api/ai/sanity-check', () => {
-  it('GET /api/sso retorna matriz de provedores configurados e status de sessão', async () => {
-    const req = new NextRequest('http://localhost:3000/api/sso', {
-      method: 'GET',
+describe('Integração Real: Credenciais Criptografadas, Isolamento Multi-Usuário e Estado Global IA', () => {
+  let userAId = '';
+  let userBId = '';
+
+  beforeAll(async () => {
+    const suffix = Date.now();
+    const userA = await prisma.user.create({
+      data: {
+        name: 'AI Auth User A',
+        email: `ai-auth-a-${suffix}@finmind.local`,
+        passwordHash: 'hash',
+        settings: {
+          create: {
+            aiProvider: 'OPENAI',
+            aiConnectionMode: 'API_KEY',
+            openaiApiKey: encryptSecret('sk-proj-userA-secret-1234567890'),
+            geminiApiKey: encryptSecret('AIzaSyUserASecretKey1234567890'),
+            claudeApiKey: null,
+            openaiModel: 'gpt-4o',
+            geminiModel: 'gemini-2.5-flash',
+            claudeModel: '',
+          },
+        },
+      },
     });
-    const res = await handleSsoStatusGet(req);
-    const json = await res.json();
+    userAId = userA.id;
 
-    expect(res.status).toBe(200);
-    expect(json.ok).toBe(true);
-    expect(json.configuredProviders).toBeDefined();
-    expect(json.configuredProviders.OPENAI).toBeDefined();
-    expect(json.configuredProviders.GEMINI).toBeDefined();
-    expect(json.configuredProviders.CLAUDE).toBeDefined();
+    const userB = await prisma.user.create({
+      data: {
+        name: 'AI Auth User B',
+        email: `ai-auth-b-${suffix}@finmind.local`,
+        passwordHash: 'hash',
+        settings: {
+          create: {
+            aiProvider: 'CLAUDE',
+            aiConnectionMode: 'API_KEY',
+            openaiApiKey: null,
+            geminiApiKey: null,
+            claudeApiKey: encryptSecret('sk-ant-api03-userB-secret-987654'),
+            claudeModel: 'claude-3-7-sonnet-latest',
+          },
+        },
+      },
+    });
+    userBId = userB.id;
   });
 
-  it('POST /api/sso bloqueia login simulado (popup_login sem API key autêntica) e rejeita chaves malformadas', async () => {
-    const popupReq = new NextRequest('http://localhost:3000/api/sso', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'popup_login',
-        provider: 'OPENAI',
-        apiKey: '',
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const popupRes = await handleSsoAuthenticateOrRevokePost(popupReq);
-    const popupJson = await popupRes.json();
-
-    expect(popupRes.status).toBe(401);
-    expect(popupJson.ok).toBe(false);
-    expect(popupJson.diagnosticCode).toBe('MISSING_CREDENTIALS');
-
-    const badKeyReq = new NextRequest('http://localhost:3000/api/sso', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'authenticate',
-        provider: 'OPENAI',
-        apiKey: 'short',
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const badKeyRes = await handleSsoAuthenticateOrRevokePost(badKeyReq);
-    const badKeyJson = await badKeyRes.json();
-
-    expect(badKeyRes.status).toBe(400);
-    expect(badKeyJson.ok).toBe(false);
-    expect(badKeyJson.diagnosticCode).toBe('INVALID_CREDENTIALS');
-
-    const revokeReq = new NextRequest('http://localhost:3000/api/sso', {
-      method: 'POST',
-      body: JSON.stringify({
-        action: 'revoke',
-        provider: 'OPENAI',
-      }),
-      headers: { 'content-type': 'application/json' },
-    });
-    const revokeRes = await handleSsoAuthenticateOrRevokePost(revokeReq);
-    const revokeJson = await revokeRes.json();
-    expect(revokeRes.status).toBe(200);
-    expect(revokeJson.ok).toBe(true);
+  afterAll(async () => {
+    if (userAId) await prisma.user.deleteMany({ where: { id: userAId } });
+    if (userBId) await prisma.user.deleteMany({ where: { id: userBId } });
   });
 
-  it('POST /api/ai/sanity-check retorna 404 MODEL_UNAVAILABLE para modelo inexistente e GET /api/ai/sanity-check lista catálogo', async () => {
-    const invalidModelReq = new NextRequest('http://localhost:3000/api/ai/sanity-check', {
-      method: 'POST',
-      body: JSON.stringify({
-        modelId: 'gpt-99-inexistente',
-        persistSelection: false,
-      }),
-      headers: { 'content-type': 'application/json' },
+  it('descriptografa credenciais independentes por provedor e isola estritamente por userId', async () => {
+    const credsA = await resolveUserProviderCredentials(userAId);
+    const credsB = await resolveUserProviderCredentials(userBId);
+
+    expect(credsA.providers.OPENAI.effectiveKey).toBe('sk-proj-userA-secret-1234567890');
+    expect(credsA.providers.GEMINI.effectiveKey).toBe('AIzaSyUserASecretKey1234567890');
+    expect(credsA.providers.CLAUDE.hasStoredKey).toBe(false);
+
+    expect(credsB.providers.CLAUDE.effectiveKey).toBe('sk-ant-api03-userB-secret-987654');
+    expect(credsB.providers.OPENAI.hasStoredKey).toBe(false);
+    expect(credsB.providers.OPENAI.effectiveKey).not.toBe(credsA.providers.OPENAI.effectiveKey);
+
+    const activeB = await resolveActiveUserAiSelection(userBId);
+    expect(activeB.provider).toBe('CLAUDE');
+    expect(activeB.modelId).toBe('claude-3-7-sonnet-latest');
+  });
+
+  it('monta GlobalAiState sem expor chaves em texto puro no cliente', async () => {
+    const stateA = await buildAuthoritativeGlobalAiState(userAId, { validateLive: false });
+    const serialized = JSON.stringify(stateA);
+    expect(serialized).not.toContain('sk-proj-userA-secret-1234567890');
+    expect(serialized).not.toContain('AIzaSyUserASecretKey1234567890');
+    expect(stateA.providers.OPENAI.keyPreview).toContain('••••');
+    expect(stateA.providers.OPENAI.status).toBe('UNVERIFIED');
+    expect(stateA.providers.CLAUDE.status).toBe('NOT_CONFIGURED');
+  });
+
+  it('rejeita sanity check sem credenciais com MISSING_CREDENTIALS e sem fallback simulado', async () => {
+    const res = await executeModelSanityCheck({
+      provider: 'CLAUDE',
+      modelId: 'claude-3-7-sonnet-latest',
+      userKeys: { openaiApiKey: null, geminiApiKey: null, claudeApiKey: null },
     });
-
-    const invalidRes = await handleSanityCheckPost(invalidModelReq);
-    const invalidJson = await invalidRes.json();
-
-    expect(invalidRes.status).toBe(404);
-    expect(invalidJson.ok).toBe(false);
-    expect(invalidJson.sanityCheck.diagnosticCode).toBe('MODEL_UNAVAILABLE');
-
-    const getReq = new NextRequest(
-      'http://localhost:3000/api/ai/sanity-check?modelId=gpt-4o-mini',
-      { method: 'GET' }
-    );
-    const getRes = await handleSanityCheckGet(getReq);
-    const getJson = await getRes.json();
-
-    expect(Array.isArray(getJson.availableModels)).toBe(true);
-    expect(getJson.availableModels.length).toBeGreaterThanOrEqual(9);
+    expect(res.passed).toBe(false);
+    expect(res.diagnosticCode).toBe('MISSING_CREDENTIALS');
   });
 });

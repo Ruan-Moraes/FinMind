@@ -40,7 +40,13 @@ export function CategoryFormModal() {
             <Button variant="secondary" onClick={wb.closeModal}>
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" form="form-category" isLoading={isSubmitting}>
+            <Button
+              data-agent-id="modal.category.btn.submit"
+              variant="primary"
+              type="submit"
+              form="form-category"
+              isLoading={isSubmitting}
+            >
               {editingCategoryId ? 'Salvar Alterações' : 'Criar Categoria'}
             </Button>
           </>
@@ -93,6 +99,7 @@ export function CategoryFormModal() {
           </div>
           <FormField label="Nome da Categoria">
             <Input
+              data-agent-id="modal.category.input.name"
               placeholder="Ex: AI, Alimentação, Peças Automotivas, Salário..."
               value={catName}
               onChange={(e) => {
@@ -106,7 +113,7 @@ export function CategoryFormModal() {
             />
           </FormField>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
+            <div data-agent-id="modal.category.section.type" className="space-y-1.5">
               <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
                 Tipo da Categoria
               </label>
@@ -137,7 +144,7 @@ export function CategoryFormModal() {
                 </button>
               </div>
             </div>
-            <div className="space-y-1.5">
+            <div data-agent-id="modal.category.section.nature" className="space-y-1.5">
               <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
                 Natureza Padrão
               </label>
@@ -170,7 +177,7 @@ export function CategoryFormModal() {
             </div>
           </div>
           {/* Seletor Visual de Ícones da Categoria */}
-          <div className="space-y-2">
+          <div data-agent-id="modal.category.section.icon" className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">
                 Ícone da Categoria
@@ -210,7 +217,7 @@ export function CategoryFormModal() {
             </div>
           </div>
           {/* Seletor Rápido de Cores */}
-          <div className="space-y-1.5">
+          <div data-agent-id="modal.category.section.color" className="space-y-1.5">
             <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
               Cor da Categoria
             </label>

@@ -21,18 +21,27 @@ export function useSettingsForm(params: {
   const [cfgDefaultAccount, setCfgDefaultAccount] = React.useState(initialDefaultAccount);
   const [cfgHolidayState, setCfgHolidayState] = React.useState(initialHolidayState);
   const [cfgHolidayCity, setCfgHolidayCity] = React.useState(initialHolidayCity);
+  const [settingsError, setSettingsError] = React.useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
+    setCfgFiscalDay(initialFiscalDay);
+    setCfgDefaultAccount(initialDefaultAccount);
     setCfgHolidayState(initialHolidayState);
     setCfgHolidayCity(initialHolidayCity);
-  }, [initialHolidayState, initialHolidayCity]);
+    setSettingsError(null);
+  }, [initialFiscalDay, initialDefaultAccount, initialHolidayState, initialHolidayCity]);
 
   const handleSaveUserSettings = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSettingsError(null);
+    if (!Number.isInteger(cfgFiscalDay) || cfgFiscalDay < 1 || cfgFiscalDay > 31) {
+      setSettingsError('O dia de início do ciclo mensal deve estar entre 1 e 31.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      await updateUserSettingsAction({
+      const res = await updateUserSettingsAction({
         theme,
         density,
         hideValuesByDefault: hideValues,
@@ -41,7 +50,13 @@ export function useSettingsForm(params: {
         holidayState: cfgHolidayState || null,
         holidayCity: cfgHolidayCity.trim() || null,
       });
+      if (!res.ok) {
+        setSettingsError(res.error || 'Não foi possível salvar as preferências.');
+        return;
+      }
       onClose();
+    } catch {
+      setSettingsError('Erro de comunicação ao salvar preferências.');
     } finally {
       setIsSubmitting(false);
     }
@@ -52,7 +67,7 @@ export function useSettingsForm(params: {
     cfgDefaultAccount, setCfgDefaultAccount,
     cfgHolidayState, setCfgHolidayState,
     cfgHolidayCity, setCfgHolidayCity,
-    isSubmitting, handleSaveUserSettings,
+    settingsError, isSubmitting, handleSaveUserSettings,
   };
 }
 

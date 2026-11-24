@@ -45,7 +45,7 @@ export function CardAndInvoiceModals() {
             <Button variant="secondary" onClick={closeModal}>
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" form="form-card" isLoading={isSubmitting}>
+            <Button data-agent-id="modal.card.btn.submit" variant="primary" type="submit" form="form-card" isLoading={isSubmitting}>
               {editingCardId ? 'Salvar Alterações' : 'Salvar Cartão'}
             </Button>
           </>
@@ -54,6 +54,7 @@ export function CardAndInvoiceModals() {
         <form id="form-card" onSubmit={handleSaveCard} className="space-y-4">
           <FormField label="Nome do Cartão">
             <Input
+              data-agent-id="modal.card.input.name"
               placeholder="Ex: Nubank, XP Visa Infinite..."
               value={cardName}
               onChange={(e) => setCardName(e.target.value)}
@@ -61,7 +62,7 @@ export function CardAndInvoiceModals() {
             />
           </FormField>
 
-          <div className="space-y-1.5">
+          <div data-agent-id="modal.card.section.brand" className="space-y-1.5">
             <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
               Bandeira do Cartão
             </label>
@@ -91,6 +92,7 @@ export function CardAndInvoiceModals() {
             <div className="sm:col-span-2">
               <FormField label="Limite Total (R$)">
                 <Input
+                  data-agent-id="modal.card.input.limit"
                   tabular
                   prefixText="R$"
                   value={cardLimit}
@@ -102,6 +104,7 @@ export function CardAndInvoiceModals() {
 
             <FormField label="Dia Fechamento">
               <Input
+                data-agent-id="modal.card.input.closingDay"
                 type="number"
                 min={1}
                 max={31}
@@ -114,6 +117,7 @@ export function CardAndInvoiceModals() {
 
             <FormField label="Dia Vencimento">
               <Input
+                data-agent-id="modal.card.input.dueDay"
                 type="number"
                 min={1}
                 max={31}

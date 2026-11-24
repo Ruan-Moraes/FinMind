@@ -55,7 +55,7 @@ export function CombinedGoalsPlannerCard() {
   };
 
   return (
-    <div className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-white dark:bg-zinc-950 p-5 space-y-5">
+    <div data-agent-id="goals.section.combined" className="rounded-2xl border border-indigo-200/80 dark:border-indigo-900/60 bg-white dark:bg-zinc-950 p-5 space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">

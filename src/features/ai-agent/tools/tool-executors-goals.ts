@@ -18,10 +18,10 @@ export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
       ? await prisma.portfolioGoal.findFirst({ where: { id: parsed.goalId, userId } })
       : null;
 
-    if (!existing && parsed.matchTitle !== undefined) {
+    const matchNeedle = parsed.matchTitle?.trim().toLowerCase() || '';
+    if (!existing && matchNeedle) {
       const goals = await prisma.portfolioGoal.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
-      const needle = parsed.matchTitle.toLowerCase();
-      existing = needle ? goals.find((g) => g.title.toLowerCase().includes(needle)) || goals[0] || null : goals[0] || null;
+      existing = goals.find((g) => g.title.toLowerCase().includes(matchNeedle)) || null;
     }
 
     const isUpdate = Boolean(existing);
@@ -67,9 +67,18 @@ export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
       postConfirmVisualSteps: [
         { id: 's1', action: 'SWITCH_TAB', tab: 'goals', targetId: 'nav.tab.goals', caption: 'Navegando para Meta de Carteira' },
         { id: 's2', action: 'OPEN_MODAL', modalType: 'GOAL', targetId: 'goals.btn.create', caption: isUpdate ? 'Abrindo formulário da meta' : 'Abrindo nova Meta de Carteira' },
-        { id: 's3', action: 'FILL_FIELD', targetId: 'modal.goal.input.title', fieldValue: effectiveTitle, caption: `Preenchendo "${effectiveTitle}"` },
+        {
+          id: 's3',
+          action: 'FILL_FIELD',
+          targetId: 'modal.goal.input.title',
+          fieldValue: effectiveTitle,
+          caption: `Preenchendo "${effectiveTitle}"`,
+          tooltipTitle: isUpdate ? 'Atualizando Meta' : 'Nova Meta de Carteira',
+          tooltipBody: `Preenchendo o título "${effectiveTitle}" e o alvo de ${formatCentsToBRL(targetCents)} para ${monthLabel}.`,
+          tone: 'indigo',
+        },
         { id: 's4', action: 'FILL_FIELD', targetId: 'modal.goal.input.targetAmount', fieldValue: formatBrlInput(targetCents), caption: `Definindo valor ${formatCentsToBRL(targetCents)}` },
-        { id: 's5', action: 'HIGHLIGHT', targetId: 'modal.goal.btn.submit', caption: 'Salvando e validando no banco', pauseMs: 300 },
+        { id: 's5', action: 'HIGHLIGHT', targetId: 'modal.goal.btn.submit', caption: 'Salvando e validando no banco', tone: 'emerald', pauseMs: 320 },
         { id: 's6', action: 'CLOSE_MODAL', caption: 'Atualizando painel de metas' },
       ],
       reversible: true,

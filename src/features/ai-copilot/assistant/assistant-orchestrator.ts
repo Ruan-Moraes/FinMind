@@ -2,7 +2,8 @@ import { prisma } from '@/shared/lib/prisma';
 import { formatCentsToBRL } from '@/shared/lib/currency';
 import { getAccountsWithBalances, getCreditCardsWithSummary, getPortfolioGoalsProgress, getMonthSummary, getStaticBaselineSummary, getMoMComparison, getSixMonthsHistory } from '@/features/analytics';
 import { retrieveFinancialContextForQuery } from '@/features/ai-copilot/rag';
-import { getAiModelDescriptor, resolveDynamicModelRoute, callProviderApiJson, extractJsonFromAiResponse } from '@/features/ai-copilot/providers';
+import { getAiModelDescriptor, callProviderApiJson, extractJsonFromAiResponse } from '@/features/ai-copilot/providers';
+import { resolveActiveUserAiSelection } from '@/features/ai-copilot/services/ai-credentials-service';
 import { type AssistantStructuredResponse, buildGroundedAssistantPrompt } from "@/features/ai-copilot/assistant/assistant-types-and-prompts";
 import { buildDeterministicAssistantSynthesis } from "@/features/ai-copilot/assistant/deterministic-synthesis";
 import { buildDynamicAssistantCharts } from "@/features/ai-copilot/assistant/assistant-chart-builder";
@@ -21,6 +22,8 @@ export async function executeContextualFinancialAssistant(params: {
   });
   if (!user) { throw new Error('Usuário autenticado não encontrado.');
   }
+  const activeAi = await resolveActiveUserAiSelection(userId);
+  const decryptedKeys = activeAi.bundle.rawDecryptedKeys;
   const now = new Date();
   const refMonth = params.referenceMonth || now.getMonth() + 1;
   const refYear = params.referenceYear || now.getFullYear();
@@ -51,7 +54,8 @@ export async function executeContextualFinancialAssistant(params: {
       topK: 15, filterMonth: refMonth,
       filterYear: refYear,
       userKeys: {
-        openaiApiKey: user.settings?.openaiApiKey, geminiApiKey: user.settings?.geminiApiKey,
+        openaiApiKey: decryptedKeys.openaiApiKey,
+        geminiApiKey: decryptedKeys.geminiApiKey,
       }, }),
   ]);
   const activeRulesForRefMonth = resolveEffectiveRulesForMonth(recurrenceRules, refYear, refMonth);
@@ -74,17 +78,9 @@ export async function executeContextualFinancialAssistant(params: {
     title: c.title, referenceDate: c.referenceDate,
     amountInCents: c.amountInCents, score: c.score,
   }));
-  const provider = (user.settings?.aiProvider || 'OPENAI') as 'OPENAI' | 'GEMINI' | 'CLAUDE';
-  const modelId =
-    provider === 'OPENAI'
-      ? user.settings?.openaiModel || 'gpt-4o-mini'
-      : provider === 'GEMINI'
-      ? user.settings?.geminiModel || 'gemini-2.0-flash'
-      : user.settings?.claudeModel || 'claude-3-5-sonnet-latest';
-  const descriptor = getAiModelDescriptor(modelId);
-  const routeConfig = resolveDynamicModelRoute(descriptor.id, {
-    openaiApiKey: user.settings?.openaiApiKey, geminiApiKey: user.settings?.geminiApiKey,
-    claudeApiKey: user.settings?.claudeApiKey, });
+  const provider = activeAi.provider;
+  const descriptor = getAiModelDescriptor(activeAi.modelId || 'modelo-nao-selecionado', provider);
+  const hasExternalApiKey = activeAi.hasKey && Boolean(activeAi.modelId);
   if (!hasSufficientData) {
     return {
       ok: true, question: cleanQuestion,
@@ -133,7 +129,7 @@ export async function executeContextualFinancialAssistant(params: {
     sixMonths,
   });
   let apiWarning: string | null = null;
-  if (routeConfig.hasExternalApiKey) {
+  if (hasExternalApiKey) {
     try {
       const prompt = buildGroundedAssistantPrompt({
         modelDisplayName: descriptor.displayName, cleanQuestion,
@@ -143,7 +139,7 @@ export async function executeContextualFinancialAssistant(params: {
         momComparison, portfolioGoals,
         chunks: ragResult.chunks, });
       const rawJson = await callProviderApiJson({
-        provider, apiKey: routeConfig.effectiveApiKey,
+        provider, apiKey: activeAi.apiKey,
         model: descriptor.id, prompt,
       });
       const parsed = extractJsonFromAiResponse<{ directAnswer?: string;

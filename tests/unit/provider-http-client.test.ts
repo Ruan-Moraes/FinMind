@@ -3,8 +3,11 @@ import {
   callProviderApiText,
   callProviderApiJson,
   executeModelSanityCheck,
-} from '@/features/ai-copilot/providers/provider-http-client';
-import { AI_PROVIDER_ADAPTERS } from '@/features/ai-copilot/providers/provider-adapters';
+} from '@/features/ai-copilot/providers';
+import {
+  adaptOpenAiBodyForUnsupportedParam,
+  AI_PROVIDER_ADAPTERS,
+} from '@/features/ai-copilot/providers/provider-adapters';
 import { resolveDynamicModelRoute } from '@/features/ai-copilot/models/model-route-resolver';
 
 describe('Cliente HTTP Multi-Provedor de IA & Strategy Adapters (OCP)', () => {
@@ -26,7 +29,21 @@ describe('Cliente HTTP Multi-Provedor de IA & Strategy Adapters (OCP)', () => {
       maxTokens: 256,
     });
     expect(openaiBody.temperature).toBe(0.2);
-    expect(openaiBody.max_tokens).toBe(256);
+    expect(openaiBody.max_completion_tokens).toBe(256);
+    expect(openaiBody.max_tokens).toBeUndefined();
+
+    const nextGenRoute = resolveDynamicModelRoute('gpt-6.2-sol', {
+      openaiApiKey: 'sk-test-openai-key-123456',
+    });
+    const nextGenBody = AI_PROVIDER_ADAPTERS.OPENAI.buildTextRequestBody({
+      model: nextGenRoute.model,
+      systemInstruction: 'sys',
+      userPrompt: 'hello',
+      maxTokens: 512,
+    });
+    expect(nextGenBody.max_completion_tokens).toBe(512);
+    expect(nextGenBody.max_tokens).toBeUndefined();
+    expect(nextGenBody.temperature).toBeUndefined();
 
     const reasoningRoute = resolveDynamicModelRoute('o3-mini', {
       openaiApiKey: 'sk-test-openai-key-123456',
@@ -43,7 +60,9 @@ describe('Cliente HTTP Multi-Provedor de IA & Strategy Adapters (OCP)', () => {
     const geminiRoute = resolveDynamicModelRoute('gemini-2.0-flash', {
       geminiApiKey: 'AIzaSyTestGeminiKey123456',
     });
-    expect(geminiRoute.endpointUrl).toContain('generateContent?key=AIzaSyTestGeminiKey123456');
+    expect(geminiRoute.endpointUrl).toContain('gemini-2.0-flash:generateContent');
+    expect(geminiRoute.endpointUrl).not.toContain('key=');
+    expect(geminiRoute.headers['x-goog-api-key']).toBe('AIzaSyTestGeminiKey123456');
 
     const claudeRoute = resolveDynamicModelRoute('claude-3-5-sonnet-latest', {
       claudeApiKey: 'sk-ant-test-claude-key-123456',
@@ -180,5 +199,47 @@ describe('Cliente HTTP Multi-Provedor de IA & Strategy Adapters (OCP)', () => {
     });
     expect(invalidModelRes.passed).toBe(false);
     expect(invalidModelRes.diagnosticCode).toBe('MODEL_UNAVAILABLE');
+  });
+
+  it('retenta automaticamente na OpenAI quando um modelo retorna HTTP 400 por parâmetro opcional não suportado', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported value: 'temperature' does not support 0.2 with this model.",
+            },
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { content: 'Resposta após ajuste automático' } }] }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const route = resolveDynamicModelRoute('gpt-4o-mini', {
+      openaiApiKey: 'sk-test-openai-key-123456',
+    });
+    const text = await callProviderApiText({
+      routeConfig: route,
+      systemInstruction: 'sys',
+      userPrompt: 'hello',
+    });
+    expect(text).toBe('Resposta após ajuste automático');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondPayload = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || '{}'));
+    expect(secondPayload.temperature).toBeUndefined();
+    expect(secondPayload.max_completion_tokens).toBe(1024);
+
+    const adaptedTools = adaptOpenAiBodyForUnsupportedParam(
+      { model: 'gpt-6.2-sol', messages: [], tools: [] },
+      "Function tools with reasoning_effort are not supported for gpt-6.2-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'."
+    );
+    expect(adaptedTools?.reasoning_effort).toBe('none');
   });
 });

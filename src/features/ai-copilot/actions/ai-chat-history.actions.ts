@@ -22,6 +22,7 @@ export interface SerializedChatMessage {
   content: string;
   response?: AssistantStructuredResponse;
   agentPayload?: AgentTurnPayload;
+  mutationStatus?: 'AWAITING' | 'RUNNING' | 'SUCCEEDED' | 'CANCELLED' | 'FAILED' | 'ROLLED_BACK';
   createdAt: string;
 }
 
@@ -71,35 +72,64 @@ export async function getAiChatSessionMessagesAction(sessionId: string): Promise
     return { ok: false, messages: [], error: 'Conversa não encontrada.' };
   }
 
+  const parsedMessages = session.messages.map((m) => {
+    let parsedResponse: AssistantStructuredResponse | undefined;
+    let agentPayload: AgentTurnPayload | undefined;
+    if (m.responseJson) {
+      try {
+        const parsed = JSON.parse(m.responseJson) as
+          | { kind?: string; payload?: AgentTurnPayload }
+          | AssistantStructuredResponse;
+        if ('kind' in parsed && parsed.kind === 'AGENT_TURN' && parsed.payload) {
+          agentPayload = parsed.payload;
+        } else {
+          parsedResponse = parsed as AssistantStructuredResponse;
+        }
+      } catch {
+        parsedResponse = undefined;
+      }
+    }
+    return { m, parsedResponse, agentPayload };
+  });
+
+  const auditIds = parsedMessages
+    .map((x) => x.agentPayload?.pendingMutation?.auditLogId)
+    .filter((id): id is string => Boolean(id));
+
+  const auditStatusMap = new Map<string, string>();
+  if (auditIds.length > 0 && (prisma as unknown as Record<string, unknown>).agentActionAuditLog) {
+    const logs = await prisma.agentActionAuditLog.findMany({
+      where: { id: { in: auditIds }, userId: user.id },
+      select: { id: true, status: true },
+    });
+    for (const l of logs) auditStatusMap.set(l.id, l.status);
+  }
+
+  const mapAuditStatus = (
+    raw?: string
+  ): SerializedChatMessage['mutationStatus'] => {
+    if (raw === 'SUCCEEDED') return 'SUCCEEDED';
+    if (raw === 'CANCELLED') return 'CANCELLED';
+    if (raw === 'FAILED') return 'FAILED';
+    if (raw === 'ROLLED_BACK') return 'ROLLED_BACK';
+    if (raw === 'EXECUTING') return 'RUNNING';
+    return 'AWAITING';
+  };
+
   return {
     ok: true,
     sessionTitle: session.title,
-    messages: session.messages.map((m) => {
-      let parsedResponse: AssistantStructuredResponse | undefined;
-      let agentPayload: AgentTurnPayload | undefined;
-      if (m.responseJson) {
-        try {
-          const parsed = JSON.parse(m.responseJson) as
-            | { kind?: string; payload?: AgentTurnPayload }
-            | AssistantStructuredResponse;
-          if ('kind' in parsed && parsed.kind === 'AGENT_TURN' && parsed.payload) {
-            agentPayload = parsed.payload;
-          } else {
-            parsedResponse = parsed as AssistantStructuredResponse;
-          }
-        } catch {
-          parsedResponse = undefined;
-        }
-      }
-      return {
-        id: m.id,
-        role: m.role === 'user' ? 'user' : 'assistant',
-        content: m.content,
-        response: parsedResponse,
-        agentPayload,
-        createdAt: m.createdAt.toISOString(),
-      };
-    }),
+    messages: parsedMessages.map(({ m, parsedResponse, agentPayload }) => ({
+      id: m.id,
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content,
+      response: parsedResponse,
+      agentPayload,
+      mutationStatus: agentPayload?.pendingMutation
+        ? mapAuditStatus(auditStatusMap.get(agentPayload.pendingMutation.auditLogId))
+        : undefined,
+      createdAt: m.createdAt.toISOString(),
+    })),
   };
 }
 

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/shared/lib/prisma';
 import { parseInputToCents } from '@/shared/lib/currency';
 import { requireAuthenticatedUser } from '@/features/auth';
+import { syncUserFinancialKnowledge } from '@/features/ai-copilot/rag';
 import {
   setMonthlyOverrideValue,
   toggleSkippedMonthList,
@@ -83,6 +84,7 @@ export async function toggleRecurrenceRuleSkipMonthAction(data: {
       data: { skippedMonths: nextJson },
     });
 
+    await syncUserFinancialKnowledge(user.id).catch(() => undefined);
     revalidatePath('/');
     return { ok: true, isSkipped, ruleDescription: rule.description };
   } catch (err) {
@@ -128,6 +130,7 @@ export async function setRecurrenceRuleMonthOverrideAction(data: {
       data: { monthlyOverrides: nextJson },
     });
 
+    await syncUserFinancialKnowledge(user.id).catch(() => undefined);
     revalidatePath('/');
     return { ok: true, effectiveAmountInCents: nextAmount ?? rule.amountInCents };
   } catch (err) {

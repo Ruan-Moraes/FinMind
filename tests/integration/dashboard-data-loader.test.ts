@@ -8,7 +8,6 @@ describe('Integração SQLite: Dashboard Data Loader (SSR Aggregator)', () => {
 
     const data = await loadSerializedDashboardData({
       user,
-      ssoState: { authenticated: false, session: null },
       resolvedParams: {
         month: '11',
         year: '2026',

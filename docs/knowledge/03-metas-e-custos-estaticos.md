@@ -1,21 +1,21 @@
 ---
 docId: goals-and-static-rules
 module: goals
-version: 1.0.0
+version: 1.1.0
 screens: ["goals", "modal:GOAL", "modal:STATIC_RULE", "modal:BUDGET", "modal:CATEGORY"]
-relatedTools: ["navigate_to_section", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "delete_static_rule", "upsert_budget", "upsert_category", "guide_feature_workflow"]
-tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo estatico", "ganho estatico", "dia util", "orcamento", "categoria"]
+relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule"]
+tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo estatico", "ganho estatico", "dia util", "orcamento", "limite de gasto", "categoria", "categorias de gastos"]
 ---
 
 # Metas de Carteira, Custos Estáticos, Orçamentos e Categorias
 
 ## Onde encontrar
 - Aba **Meta de Carteira & Custos Estáticos** (`nav.tab.goals`).
-- Contém 4 blocos principais:
-  1. **Metas de Carteira & Patrimônio** + card **Metas Juntas (Projeção Consolidada & Simulador)** — botão `goals.btn.create`.
-  2. **Custos Estáticos & Ganhos Estáticos (Linha de Base Fixa)** — botões `goals.btn.createIncomeRule` e `goals.btn.createExpenseRule`, tabela de regras planejadas (com status *Já caiu no mês* / *Aguardando no mês*) e tabela de lançamentos fixos já caídos.
-  3. **Orçamentos Mensais por Categoria** — botão `goals.btn.createBudget`.
-  4. **Categorias Personalizadas** — botão `goals.btn.createCategory`.
+- Contém 4 blocos principais (cada um com seu próprio modal e `openModalType` específico — nunca confundir Meta com Categoria ou Orçamento):
+  1. **Metas de Carteira & Patrimônio** (`goals.section.goals`) + **Metas Juntas** (`goals.section.combined`) — botão `goals.btn.create`, modal `GOAL`.
+  2. **Custos Estáticos & Ganhos Estáticos (Linha de Base Fixa)** (`goals.section.staticRules`, tabela `goals.table.staticRules`) — botões `goals.btn.createIncomeRule` e `goals.btn.createExpenseRule`, modal `STATIC_RULE`.
+  3. **Limites de Gastos por Categoria (Orçamentos Mensais)** (`goals.section.budgets`) — botão `goals.btn.createBudget` (`+ Definir Limite Mensal`), modal `BUDGET`.
+  4. **Categorias de Gastos & Ganhos (Editáveis)** (`goals.section.categories`) — botões `goals.btn.createExpenseCategory` (`Nova Categoria de Gasto`), `goals.btn.createIncomeCategory` (`Nova Categoria de Ganho`) e `goals.btn.createCategory` (`+ Nova Categoria`), modal `CATEGORY`.
 
 ## Fluxo: Cadastrar ou Alterar Meta de Carteira (`modal:GOAL`)
 1. Navegar até `nav.tab.goals`.
@@ -30,7 +30,25 @@ tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo est
 ## Fluxo: Custos e Ganhos Estáticos com Dia Útil (`modal:STATIC_RULE`)
 - Permite cadastrar receitas ou despesas fixas mensais (`modal.staticRule.input.description`, `modal.staticRule.input.amount`).
 - No campo de vencimento/recebimento, suporta **Dia Fixo** (1 a 31) ou **Dia Útil** (1 a 23, ex.: 5º dia útil), com opção **Regra CLT (considerar sábado como dia útil)** e prévia em tempo real considerando os feriados configurados em Configurações.
-- **Pular mês (`Pular mês` / `Reativar`):** Qualquer regra fixa pode ser pulada em um mês específico (`skippedMonths`), deixando de compor os custos/ganhos estáticos, a margem livre e o ritmo das metas apenas naquele mês e voltando automaticamente a contar no mês seguinte.
+- **Menu contextual (`⋯`) por regra fixa:** Cada item na tabela **Regras Fixas Mensais** possui um menu `⋯` organizado em *Apenas neste mês* (**Ajustar valor neste mês**, **Pular neste mês / Reativar neste mês**) e *Regra mensal fixa* (**Editar regra fixa**, **Excluir regra**).
+- **Ajuste de valor em mês específico (`monthlyOverrides`):** Também pode ser feito clicando diretamente no valor da linha, alterando o valor apenas daquele mês sem afetar os próximos meses (com opção de restaurar ao valor base).
+- **Pular mês com Desfazer (`skippedMonths`):** Qualquer regra fixa pode ser pulada em um mês específico, exibindo um banner imediato de confirmação com botão **Desfazer** em 1 clique. A regra deixa de compor os custos/ganhos estáticos, a margem livre e o ritmo das metas apenas naquele mês e volta automaticamente a contar no mês seguinte.
+
+## Fluxo: Categorias de Gastos e Ganhos (`modal:CATEGORY`)
+1. Navegar até `nav.tab.goals` e rolar até a seção **Categorias de Gastos & Ganhos (Editáveis)** (`goals.section.categories`).
+2. Clicar em **Nova Categoria de Gasto** (`goals.btn.createExpenseCategory`) ou **Nova Categoria de Ganho** (`goals.btn.createIncomeCategory`) — ou clicar no ícone de lápis em um card de categoria existente para editar.
+3. No modal **Nova Categoria** (`openModalType: "CATEGORY"`), preencher:
+   - **Nome da Categoria** (`modal.category.input.name`): ex. Alimentação, Transporte, Assinaturas.
+   - **Tipo da Categoria** (`modal.category.section.type`): **Despesa** ou **Receita**.
+   - **Natureza Padrão** (`modal.category.section.nature`): **Variável** ou **Fixo / Estático**.
+   - **Ícone da Categoria** (`modal.category.section.icon`) e **Cor da Categoria** (`modal.category.section.color`).
+4. Clicar em **Criar Categoria** (`modal.category.btn.submit`).
+
+## Fluxo: Limites de Gastos / Orçamentos por Categoria (`modal:BUDGET`)
+1. Navegar até `nav.tab.goals` e localizar a seção **Limites de Gastos por Categoria** (`goals.section.budgets`).
+2. Clicar em **+ Definir Limite Mensal** (`goals.btn.createBudget`) para abrir o modal (`openModalType: "BUDGET"`).
+3. Selecionar a categoria de despesa (`modal.budget.section.category`), informar o **Teto Máximo no Mês (R$)** (`modal.budget.input.limit`) e clicar em **Salvar Limite** (`modal.budget.btn.submit`).
+4. O sistema exibe alertas visuais automáticos em 70% (Atenção) e 90%+ (Crítico).
 
 ## Regras de Negócio
 - O cálculo de previsão das metas prioriza o ritmo da linha de base estática (`Ganhos Estáticos - Custos Estáticos`); caso não existam regras, utiliza a média do extrato.

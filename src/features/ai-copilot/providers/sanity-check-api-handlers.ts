@@ -1,166 +1,111 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { requireAuthenticatedUser } from '@/features/auth';
 import { prisma } from '@/shared/lib/prisma';
-import { getActiveSsoSession } from '@/features/auth/sso';
+import type { AiProviderId } from '@/features/ai-copilot/domain/ai-provider-types';
 import {
   executeModelSanityCheck,
   findStrictAiModelDescriptor,
-  getAiModelDescriptor,
-  AI_MODELS_CATALOG,
 } from '@/features/ai-copilot/providers';
+import { resolveUserProviderCredentials } from '@/features/ai-copilot/services/ai-credentials-service';
+
+function parseProvider(raw?: string | null): AiProviderId | undefined {
+  const up = String(raw || '').toUpperCase().trim();
+  if (up === 'OPENAI' || up === 'GEMINI' || up === 'CLAUDE') return up;
+  return undefined;
+}
 
 /**
- * Handler GET /api/ai/sanity-check?modelId=gpt-4o-mini
- * Verifica conectividade REAL, credencial oficial do provedor e executa o Sanity Check ("Qual é o seu modelo?").
+ * GET /api/ai/sanity-check?provider=OPENAI&modelId=...
+ * Executa teste operacional real de inferência usando as credenciais descriptografadas do usuário.
  */
 export async function handleSanityCheckGet(req: NextRequest) {
   try {
-    const headerToken =
-      req.headers.get('x-finmind-sso-token') || req.headers.get('authorization');
-    const [user, ssoState] = await Promise.all([
-      requireAuthenticatedUser(),
-      getActiveSsoSession(headerToken),
-    ]);
-
+    const user = await requireAuthenticatedUser();
+    const bundle = await resolveUserProviderCredentials(user.id);
     const { searchParams } = new URL(req.url);
-    const requestedModelId =
-      searchParams.get('modelId') ||
-      user.settings?.openaiModel ||
-      'gpt-4o-mini';
+    const provider = parseProvider(searchParams.get('provider')) || bundle.activeProvider;
+    const requestedModelId = searchParams.get('modelId') || bundle.providers[provider].selectedModelId;
 
     const result = await executeModelSanityCheck({
+      provider,
       modelId: requestedModelId,
-      ssoToken: ssoState.token || '',
-      userKeys: {
-        openaiApiKey: user.settings?.openaiApiKey,
-        geminiApiKey: user.settings?.geminiApiKey,
-        claudeApiKey: user.settings?.claudeApiKey,
-      },
+      userKeys: bundle.rawDecryptedKeys,
     });
 
     return NextResponse.json(
-      {
-        ok: result.passed,
-        ssoAuthenticated: result.passed,
-        ssoSession: ssoState.session,
-        sanityCheck: result,
-        error: result.error || null,
-        availableModels: AI_MODELS_CATALOG.map((m) => ({
-          id: m.id,
-          displayName: m.displayName,
-          provider: m.provider,
-          providerGroupLabel: m.providerGroupLabel,
-          capabilities: m.capabilities,
-        })),
-      },
+      { ok: result.passed, sanityCheck: result, error: result.error || null },
       { status: result.passed ? 200 : result.httpStatus || 401 }
     );
   } catch (err) {
     return NextResponse.json(
-      {
-        ok: false,
-        ssoAuthenticated: false,
-        error: err instanceof Error ? err.message : 'Sessão não autenticada.',
-      },
+      { ok: false, error: err instanceof Error ? err.message : 'Sessão não autenticada.' },
       { status: 401 }
     );
   }
 }
 
 /**
- * Handler POST /api/ai/sanity-check
- * Body: { modelId: string, persistSelection?: boolean, customPrompt?: string }
+ * POST /api/ai/sanity-check
+ * Body: { provider?: 'OPENAI'|'GEMINI'|'CLAUDE', modelId: string, persistSelection?: boolean, customPrompt?: string }
  */
 export async function handleSanityCheckPost(req: NextRequest) {
   try {
-    const headerToken =
-      req.headers.get('x-finmind-sso-token') || req.headers.get('authorization');
-    const body = await req.json().catch(() => ({}));
-    const [user, ssoState] = await Promise.all([
-      requireAuthenticatedUser(),
-      getActiveSsoSession(headerToken),
-    ]);
+    const body = (await req.json().catch(() => ({}))) as {
+      provider?: string;
+      modelId?: string;
+      persistSelection?: boolean;
+      customPrompt?: string;
+    };
+    const user = await requireAuthenticatedUser();
+    const bundle = await resolveUserProviderCredentials(user.id);
+    const explicitProvider = parseProvider(body.provider);
+    const targetModelId = String(body.modelId || bundle.activeModelId || '').trim();
+    const descriptor = findStrictAiModelDescriptor(targetModelId, explicitProvider);
 
-    const strictDescriptor = body.modelId
-      ? findStrictAiModelDescriptor(body.modelId)
-      : getAiModelDescriptor(user.settings?.openaiModel || 'gpt-4o-mini');
-
-    if (!strictDescriptor) {
-      const invalidModelResult = await executeModelSanityCheck({
-        modelId: String(body.modelId || ''),
-        ssoToken: ssoState.token || '',
-        customPrompt: typeof body.customPrompt === 'string' ? body.customPrompt : undefined,
-        userKeys: {
-          openaiApiKey: user.settings?.openaiApiKey,
-          geminiApiKey: user.settings?.geminiApiKey,
-          claudeApiKey: user.settings?.claudeApiKey,
-        },
-      });
-
+    if (!descriptor) {
       return NextResponse.json(
-        {
-          ok: false,
-          ssoAuthenticated: false,
-          ssoSession: ssoState.session,
-          sanityCheck: invalidModelResult,
-          error: invalidModelResult.error,
-        },
-        { status: 404 }
+        { ok: false, error: 'Informe um provedor e identificador de modelo válido para testar.' },
+        { status: 400 }
       );
     }
 
-    if (body.persistSelection !== false) {
+    if (body.persistSelection === true) {
       await prisma.userSettings.upsert({
         where: { userId: user.id },
         create: {
           userId: user.id,
-          aiProvider: strictDescriptor.provider,
-          openaiModel:
-            strictDescriptor.provider === 'OPENAI' ? strictDescriptor.id : 'gpt-4o-mini',
-          geminiModel:
-            strictDescriptor.provider === 'GEMINI' ? strictDescriptor.id : 'gemini-2.0-flash',
-          claudeModel:
-            strictDescriptor.provider === 'CLAUDE'
-              ? strictDescriptor.id
-              : 'claude-3-5-sonnet-latest',
+          aiProvider: descriptor.provider,
+          aiConnectionMode: 'API_KEY',
+          openaiModel: descriptor.provider === 'OPENAI' ? descriptor.id : '',
+          geminiModel: descriptor.provider === 'GEMINI' ? descriptor.id : '',
+          claudeModel: descriptor.provider === 'CLAUDE' ? descriptor.id : '',
         },
         update: {
-          aiProvider: strictDescriptor.provider,
-          ...(strictDescriptor.provider === 'OPENAI' && { openaiModel: strictDescriptor.id }),
-          ...(strictDescriptor.provider === 'GEMINI' && { geminiModel: strictDescriptor.id }),
-          ...(strictDescriptor.provider === 'CLAUDE' && { claudeModel: strictDescriptor.id }),
+          aiProvider: descriptor.provider,
+          aiConnectionMode: 'API_KEY',
+          ...(descriptor.provider === 'OPENAI' && { openaiModel: descriptor.id }),
+          ...(descriptor.provider === 'GEMINI' && { geminiModel: descriptor.id }),
+          ...(descriptor.provider === 'CLAUDE' && { claudeModel: descriptor.id }),
         },
       });
+      revalidatePath('/');
     }
 
     const result = await executeModelSanityCheck({
-      modelId: strictDescriptor.id,
-      ssoToken: ssoState.token || '',
+      provider: descriptor.provider,
+      modelId: descriptor.id,
       customPrompt: typeof body.customPrompt === 'string' ? body.customPrompt : undefined,
-      userKeys: {
-        openaiApiKey: user.settings?.openaiApiKey,
-        geminiApiKey: user.settings?.geminiApiKey,
-        claudeApiKey: user.settings?.claudeApiKey,
-      },
+      userKeys: bundle.rawDecryptedKeys,
     });
 
     return NextResponse.json(
-      {
-        ok: result.passed,
-        ssoAuthenticated: result.passed,
-        ssoSession: ssoState.session,
-        sanityCheck: result,
-        error: result.error || null,
-      },
+      { ok: result.passed, sanityCheck: result, error: result.error || null },
       { status: result.passed ? 200 : result.httpStatus || 401 }
     );
   } catch (err) {
     return NextResponse.json(
-      {
-        ok: false,
-        ssoAuthenticated: false,
-        error: err instanceof Error ? err.message : 'Sessão não autenticada.',
-      },
+      { ok: false, error: err instanceof Error ? err.message : 'Sessão não autenticada.' },
       { status: 401 }
     );
   }

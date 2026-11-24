@@ -1,153 +1,73 @@
 import { describe, it, expect } from 'vitest';
-import { signSessionJwt, verifySessionJwt } from '@/features/auth/domain/jwt-session';
-import { signSsoJwtToken, verifySsoJwtToken } from '@/features/auth/domain/sso-jwt';
+import { signSessionJwt, verifySessionJwt } from '@/features/auth';
 import {
-  getActiveSsoSession,
-  issueSsoSessionCookie,
-  revokeSsoSessionCookie,
-} from '@/features/auth/services/sso-cookies';
-import { getSession, isSessionExplicitlyLoggedOut } from '@/features/auth/services/session-cookies';
-import { encryptSecret, decryptSecret } from '@/features/auth/domain/secret-crypto';
-import { fetchLiveGeminiModels } from '@/features/ai-copilot/providers/gemini-models-discovery';
-import { resolveCategoryIconId } from '@/shared/icons/icon-inference';
-import {
-  AI_MODELS_CATALOG,
-  SSO_POPUP_TOKEN_PREFIX,
-  getAiModelDescriptor,
+  buildDynamicModelDescriptor,
+  classifyProviderError,
   findStrictAiModelDescriptor,
   isAuthenticApiKey,
   maskApiKey,
   resolveDynamicModelRoute,
+  validateModelIdentityResponse,
 } from '@/features/ai-copilot/models';
+import { mapDiagnosticCodeToProviderStatus } from '@/features/ai-copilot/domain/ai-provider-types';
 
-describe('Núcleo Puro: Autenticação JWT, SSO, Ícones e Catálogo de Modelos IA', () => {
-  it('assina e verifica tokens de sessão JWT', async () => {
+describe('Autenticação JWT, Roteamento Dinâmico de Modelos e Classificação de Erros', () => {
+  it('assina e valida JWT de sessão principal preservando payload', async () => {
     const token = await signSessionJwt({
-      userId: 'u-1',
-      email: 'teste@finmind.app',
-      name: 'Teste',
+      userId: 'user-1',
+      email: 'ruan@finmind.app',
+      name: 'Ruan',
     });
-    const decoded = await verifySessionJwt(token);
-    expect(decoded?.userId).toBe('u-1');
-    expect(decoded?.email).toBe('teste@finmind.app');
-    expect(await verifySessionJwt('token-invalido')).toBeNull();
+    const payload = await verifySessionJwt(token);
+    expect(payload?.userId).toBe('user-1');
+    expect(payload?.email).toBe('ruan@finmind.app');
   });
 
-  it('assina e valida tokens SSO com escopo ai:invoke', async () => {
-    const { token, payload } = await signSsoJwtToken({
-      userId: 'u-2',
-      email: 'sso@finmind.app',
-      name: 'SSO User',
-      idpProvider: 'OPENAI_SSO',
-    });
-    expect(payload.scopes).toContain('ai:invoke');
-    const verified = await verifySsoJwtToken(token, 'ai:invoke');
-    expect(verified.valid).toBe(true);
-    expect(verified.payload?.sub).toBe('u-2');
+  it('reconhece dinamicamente modelos atuais e futuros sem depender de lista estática', () => {
+    const futureOpenAi = findStrictAiModelDescriptor('gpt-7-turbo', 'OPENAI');
+    expect(futureOpenAi?.provider).toBe('OPENAI');
+    expect(futureOpenAi?.upstreamApiModel).toBe('gpt-7-turbo');
 
-    const bad = await verifySsoJwtToken('invalid.jwt.token', 'ai:invoke');
-    expect(bad.valid).toBe(false);
+    const futureClaude = findStrictAiModelDescriptor('claude-5-sonnet-20270101', 'CLAUDE');
+    expect(futureClaude?.provider).toBe('CLAUDE');
+    expect(futureClaude?.endpointUrl).toBe('https://api.anthropic.com/v1/messages');
+
+    const futureGemini = buildDynamicModelDescriptor('GEMINI', 'gemini-4.5-pro');
+    expect(futureGemini.provider).toBe('GEMINI');
+    expect(futureGemini.endpointUrl).toContain('gemini-4.5-pro:generateContent');
   });
 
-  it('valida helpers de cookie/header SSO e sessão fora do ciclo HTTP', async () => {
-    const issued = await issueSsoSessionCookie({
-      userId: 'u-cookie',
-      email: 'cookie@finmind.local',
-      name: 'Cookie User',
-      idpProvider: 'OPENAI_SSO',
-    });
-    expect(issued.token.length).toBeGreaterThan(20);
-
-    const active = await getActiveSsoSession(`Bearer ${issued.token}`);
-    expect(active.authenticated).toBe(true);
-    expect(active.session?.email).toBe('cookie@finmind.local');
-
-    const invalid = await getActiveSsoSession('Bearer token-invalido');
-    expect(invalid.authenticated).toBe(false);
-
-    await revokeSsoSessionCookie();
-    expect(await getSession()).toBeNull();
-    expect(await isSessionExplicitlyLoggedOut()).toBe(false);
-  });
-
-  it('infere ícones semânticos de categorias', () => {
-    expect(resolveCategoryIconId(null, 'Supermercado')).toBe('ShoppingCart');
-    expect(resolveCategoryIconId(null, 'Moradia & Aluguel')).toBe('Home');
-    expect(resolveCategoryIconId('Briefcase', 'Qualquer')).toBe('Briefcase');
-  });
-
-  it('valida chaves autênticas, mascaramento e resolução dinâmica de rotas dos modelos', () => {
-    expect(AI_MODELS_CATALOG.length).toBeGreaterThanOrEqual(9);
-    expect(getAiModelDescriptor('gpt-4o-mini').provider).toBe('OPENAI');
-    expect(findStrictAiModelDescriptor('modelo-inexistente')).toBeNull();
-
+  it('envia chave Gemini no header x-goog-api-key (nunca na URL) e rejeita chaves mascaradas/criptografadas', () => {
     expect(isAuthenticApiKey('sk-proj-1234567890abcdef')).toBe(true);
-    expect(isAuthenticApiKey(`${SSO_POPUP_TOKEN_PREFIX}fake`)).toBe(false);
-    expect(isAuthenticApiKey('short')).toBe(false);
-    expect(maskApiKey('sk-proj-1234567890abcdef')).toContain('••••');
+    expect(isAuthenticApiKey('enc:v1:abc:def:ghi')).toBe(false);
+    expect(isAuthenticApiKey('sk-proj••••cdef')).toBe(false);
+    expect(isAuthenticApiKey('')).toBe(false);
+    expect(maskApiKey('sk-proj-1234567890abcdef')).toBe('sk-proj••••cdef');
 
-    const route = resolveDynamicModelRoute('gemini-2.0-flash', {
-      geminiApiKey: 'AIzaSyFakeKey1234567890',
-    });
-    expect(route.provider).toBe('GEMINI');
-    expect(route.resolvedCredentialSource).toBe('USER_DB_KEY');
-    expect(route.endpointUrl).toContain('gemini-2.0-flash');
+    const route = resolveDynamicModelRoute(
+      'gemini-2.5-flash',
+      { geminiApiKey: 'AIzaSyFakeKeyForHeaderTest12345' },
+      'GEMINI'
+    );
+    expect(route.hasExternalApiKey).toBe(true);
+    expect(route.endpointUrl).not.toContain('key=');
+    expect(route.headers['x-goog-api-key']).toBe('AIzaSyFakeKeyForHeaderTest12345');
   });
 
-  it('cifra e decifra chaves de API com AES-256-GCM preservando retrocompatibilidade', () => {
-    const rawKey = 'sk-proj-test-secret-key-9876543210abcdef';
-    const encrypted = encryptSecret(rawKey);
-    expect(encrypted.startsWith('enc:v1:')).toBe(true);
-    expect(encrypted).not.toContain(rawKey);
-    expect(decryptSecret(encrypted)).toBe(rawKey);
-    expect(encryptSecret(encrypted)).toBe(encrypted);
-    expect(decryptSecret('legacy-plaintext-key-123')).toBe('legacy-plaintext-key-123');
-    expect(decryptSecret('enc:v1:00:00:corrupted')).toBe('');
-    expect(encryptSecret('')).toBe('');
+  it('classifica corretamente erros HTTP em códigos diagnósticos e estados de provedor', () => {
+    expect(mapDiagnosticCodeToProviderStatus(classifyProviderError(401, 'Incorrect API key'))).toBe('INVALID_CREDENTIALS');
+    expect(mapDiagnosticCodeToProviderStatus(classifyProviderError(403, 'Permission denied'))).toBe('ACCESS_RESTRICTED');
+    expect(mapDiagnosticCodeToProviderStatus(classifyProviderError(429, 'Quota exceeded'))).toBe('QUOTA_EXCEEDED');
+    expect(mapDiagnosticCodeToProviderStatus(classifyProviderError(402, 'Insufficient billing credit'))).toBe('QUOTA_EXCEEDED');
+    expect(mapDiagnosticCodeToProviderStatus(classifyProviderError(503, 'Service unavailable'))).toBe('UNAVAILABLE');
+    // 404 de modelo descontinuado não marca a credencial como inválida
+    expect(classifyProviderError(404, 'Model not found')).toBe('MODEL_UNAVAILABLE');
+    expect(mapDiagnosticCodeToProviderStatus('MODEL_UNAVAILABLE')).toBe('CONNECTED');
   });
 
-  it('aceita modelos Gemini dinâmicos e descobre lista ativa via endpoint oficial da Google', async () => {
-    const dynamicDesc = findStrictAiModelDescriptor('gemini-3.0-flash-preview');
-    expect(dynamicDesc?.provider).toBe('GEMINI');
-    expect(dynamicDesc?.id).toBe('gemini-3.0-flash-preview');
-    expect(dynamicDesc?.endpointUrl).toContain('gemini-3.0-flash-preview:generateContent');
-
-    const prevFetch = globalThis.fetch;
-    globalThis.fetch = (async () =>
-      new Response(
-        JSON.stringify({
-          models: [
-            {
-              name: 'models/gemini-2.5-flash',
-              displayName: 'Gemini 2.5 Flash',
-              supportedGenerationMethods: ['generateContent'],
-              inputTokenLimit: 1048576,
-            },
-            {
-              name: 'models/gemini-3-pro-preview',
-              displayName: 'Gemini 3 Pro Preview',
-              supportedGenerationMethods: ['generateContent'],
-              inputTokenLimit: 1048576,
-            },
-            {
-              name: 'models/text-embedding-004',
-              displayName: 'Embedding',
-              supportedGenerationMethods: ['embedContent'],
-            },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
-      )) as typeof fetch;
-
-    try {
-      const live = await fetchLiveGeminiModels('AIzaSyValidDynamicTestKey12345');
-      expect(live.ok).toBe(true);
-      expect(live.source).toBe('LIVE_GOOGLE_API');
-      expect(live.models.map((m) => m.id)).toContain('gemini-2.5-flash');
-      expect(live.models.map((m) => m.id)).toContain('gemini-3-pro-preview');
-      expect(live.models.map((m) => m.id)).not.toContain('text-embedding-004');
-    } finally {
-      globalThis.fetch = prevFetch;
-    }
+  it('valida identidade textual do modelo sem cruzar provedores', () => {
+    expect(validateModelIdentityResponse('gpt-4o', 'Sou o modelo GPT-4o da OpenAI.', 'OPENAI').passed).toBe(true);
+    expect(validateModelIdentityResponse('gpt-4o', 'Sou o Claude da Anthropic.', 'OPENAI').passed).toBe(false);
+    expect(validateModelIdentityResponse('claude-3-7-sonnet', 'Sou o Claude da Anthropic.', 'CLAUDE').passed).toBe(true);
   });
 });

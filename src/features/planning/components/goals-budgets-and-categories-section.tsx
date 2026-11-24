@@ -22,7 +22,7 @@ export function GoalsBudgetsAndCategoriesSection() {
   return (
     <>
             {/* Seção 3: Tetos de Orçamento por Categoria (RF-13 & RF-14) */}
-            <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-4">
+            <div data-agent-id="goals.section.budgets" className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-4">
               <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold">Limites de Gastos por Categoria</h2>
@@ -32,6 +32,7 @@ export function GoalsBudgetsAndCategoriesSection() {
                 </div>
                 <div className="flex items-center justify-end gap-2.5 shrink-0 sm:ml-auto">
                   <Button
+                    data-agent-id="goals.btn.createCategory"
                     variant="secondary"
                     size="sm"
                     onClick={() => handleOpenCreateCategoryModal('EXPENSE')}
@@ -39,6 +40,7 @@ export function GoalsBudgetsAndCategoriesSection() {
                     + Nova Categoria
                   </Button>
                   <Button
+                    data-agent-id="goals.btn.createBudget"
                     variant="secondary"
                     size="sm"
                     onClick={() => setIsBudgetModalOpen(true)}
@@ -125,7 +127,7 @@ export function GoalsBudgetsAndCategoriesSection() {
             </div>
 
             {/* Seção 4: Categorias Cadastradas (Gastos & Ganhos) — Totalmente Editáveis */}
-            <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-4">
+            <div data-agent-id="goals.section.categories" className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-4">
               <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="min-w-0">
                   <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -138,6 +140,7 @@ export function GoalsBudgetsAndCategoriesSection() {
                 </div>
                 <div className="flex items-center justify-end gap-2 shrink-0 sm:ml-auto">
                   <Button
+                    data-agent-id="goals.btn.createIncomeCategory"
                     variant="secondary"
                     size="sm"
                     onClick={() => handleOpenCreateCategoryModal('INCOME')}
@@ -146,6 +149,7 @@ export function GoalsBudgetsAndCategoriesSection() {
                     Nova Categoria de Ganho
                   </Button>
                   <Button
+                    data-agent-id="goals.btn.createExpenseCategory"
                     variant="primary"
                     size="sm"
                     onClick={() => handleOpenCreateCategoryModal('EXPENSE')}

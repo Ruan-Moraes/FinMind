@@ -1,16 +1,24 @@
 import type { AgentRiskLevel } from '@/features/ai-agent/domain/agent-types';
 
 export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
-  // L0: Leitura, orientação, captura
+  // L0: Leitura de dados reais, análise, visualização dinâmica, orientação e captura
+  query_financial_overview: 'L0',
+  query_portfolio_goals: 'L0',
+  query_expenses_and_transactions: 'L0',
+  compare_financial_periods: 'L0',
+  query_forecasts_and_simulations: 'L0',
+  search_financial_history: 'L0',
+  generate_financial_report: 'L0',
+  render_visual_content: 'L0',
   navigate_to_section: 'L0',
   guide_feature_workflow: 'L0',
   capture_annotated_screen: 'L0',
+  open_settings: 'L0',
 
   // L1: Estado visual / filtros / período
   change_period: 'L1',
   change_comparison_periods: 'L1',
   apply_transaction_filters: 'L1',
-  open_settings: 'L0',
 
   // L2: Criação / Edição persistente (requer confirmação Antes -> Depois, reversível)
   update_user_preferences: 'L2',

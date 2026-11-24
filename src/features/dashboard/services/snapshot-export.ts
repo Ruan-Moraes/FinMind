@@ -85,6 +85,7 @@ export async function exportUserSnapshot(userId: string): Promise<{
         id: r.id, description: r.description, type: r.type, nature: r.nature,
         amountInCents: r.amountInCents, frequency: r.frequency, dayOfMonth: r.dayOfMonth,
         dayType: r.dayType, includeSaturday: r.includeSaturday,
+        skippedMonths: r.skippedMonths, monthlyOverrides: r.monthlyOverrides,
         isActive: r.isActive, categoryId: r.categoryId, accountId: r.accountId,
         creditCardId: r.creditCardId, createdAt: iso(r.createdAt),
       })),

@@ -178,58 +178,63 @@ export async function revertStatementImportBatchAction(batchId: string): Promise
     ? snapshot.updatedAccountBalances
     : [];
   const updatedTxIds = new Set(updatedTxList.map((t) => t.id));
-  await prisma.$transaction(async (tx) => {
-    for (const prev of updatedTxList) {
-      await tx.transaction.updateMany({
-        where: { id: prev.id, userId: user.id },
-        data: {
-          status: prev.previousStatus,
-          amountInCents: prev.previousAmountInCents,
-          date: new Date(prev.previousDate),
-          description: prev.previousDescription,
-          categoryId: prev.previousCategoryId,
-          sourceAccountId: prev.previousSourceAccountId,
-          importBatchId: prev.previousImportBatchId,
-          importFileId: prev.previousImportFileId,
-          externalTransactionHash: prev.previousExternalHash,
-          rawBankDescription: prev.previousRawBankDescription,
-          financialAction: prev.previousFinancialAction,
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const prev of updatedTxList) {
+        await tx.transaction.updateMany({
+          where: { id: prev.id, userId: user.id },
+          data: {
+            status: prev.previousStatus,
+            amountInCents: prev.previousAmountInCents,
+            date: new Date(prev.previousDate),
+            description: prev.previousDescription,
+            categoryId: prev.previousCategoryId,
+            sourceAccountId: prev.previousSourceAccountId,
+            importBatchId: prev.previousImportBatchId,
+            importFileId: prev.previousImportFileId,
+            externalTransactionHash: prev.previousExternalHash,
+            rawBankDescription: prev.previousRawBankDescription,
+            financialAction: prev.previousFinancialAction,
+          },
+        });
+      }
+      for (const inv of updatedInvList) {
+        await tx.creditCardInvoice.updateMany({
+          where: { id: inv.id, creditCard: { userId: user.id } },
+          data: {
+            status: inv.previousStatus,
+            paidAmountInCents: inv.previousPaidAmountInCents,
+            paidAt: inv.previousPaidAt ? new Date(inv.previousPaidAt) : null,
+          },
+        });
+      }
+      await tx.transaction.deleteMany({
+        where: {
+          userId: user.id,
+          importBatchId: batch.id,
+          id: { notIn: Array.from(updatedTxIds) },
         },
       });
-    }
-    for (const inv of updatedInvList) {
-      await tx.creditCardInvoice.updateMany({
-        where: { id: inv.id },
+      for (const accBal of updatedAccBalances) {
+        await tx.account.updateMany({
+          where: { id: accBal.id, userId: user.id },
+          data: {
+            initialBalanceInCents: accBal.previousInitialBalanceInCents,
+          },
+        });
+      }
+      await tx.statementImportBatch.updateMany({
+        where: { id: batch.id, userId: user.id },
         data: {
-          status: inv.previousStatus,
-          paidAmountInCents: inv.previousPaidAmountInCents,
-          paidAt: inv.previousPaidAt ? new Date(inv.previousPaidAt) : null,
+          status: 'REVERTED',
+          revertedAt: new Date(),
         },
       });
-    }
-    await tx.transaction.deleteMany({
-      where: {
-        userId: user.id,
-        importBatchId: batch.id,
-        id: { notIn: Array.from(updatedTxIds) },
-      },
     });
-    for (const accBal of updatedAccBalances) {
-      await tx.account.updateMany({
-        where: { id: accBal.id, userId: user.id },
-        data: {
-          initialBalanceInCents: accBal.previousInitialBalanceInCents,
-        },
-      });
-    }
-    await tx.statementImportBatch.update({
-      where: { id: batch.id },
-      data: {
-        status: 'REVERTED',
-        revertedAt: new Date(),
-      },
-    });
-  });
+  } catch (err) {
+    console.error('[revertStatementImportBatchAction]', err);
+    return { ok: false, error: 'Não foi possível reverter este lote de importação.' };
+  }
   await syncUserFinancialKnowledge(user.id).catch(() => {});
   revalidatePath('/');
   return {

@@ -4,19 +4,25 @@ import { GET as handleGetModels } from '@/app/api/ai/models/route';
 import { prepareIdempotentLibsqlStatements } from '@/shared/lib/turso-ddl';
 
 describe('Integração: /api/ai/models multi-provedor & Preparação DDL Turso libSQL', () => {
-  it('retorna lista de modelos para OPENAI, GEMINI e CLAUDE via GET /api/ai/models', async () => {
+  it('responde de forma estruturada e sem fallback estático para OPENAI, GEMINI e CLAUDE via GET /api/ai/models', async () => {
     for (const provider of ['OPENAI', 'GEMINI', 'CLAUDE'] as const) {
       const req = new NextRequest(`http://localhost:3000/api/ai/models?provider=${provider}`);
       const res = await handleGetModels(req);
-      expect(res.status).toBe(200);
       const body = (await res.json()) as {
         ok: boolean;
         provider: string;
         models: Array<{ id: string; displayName: string }>;
+        diagnosticCode?: string | null;
       };
-      expect(body.ok).toBe(true);
       expect(body.provider).toBe(provider);
-      expect(body.models.length).toBeGreaterThan(0);
+      expect(Array.isArray(body.models)).toBe(true);
+      if (body.ok) {
+        expect(res.status).toBe(200);
+        expect(body.models.length).toBeGreaterThan(0);
+      } else {
+        expect(body.models).toEqual([]);
+        expect(body.diagnosticCode).toBeTruthy();
+      }
     }
   });
 

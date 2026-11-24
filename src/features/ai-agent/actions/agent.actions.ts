@@ -21,6 +21,15 @@ function buildSessionTitle(message: string): string {
   return clean.length > 56 ? `${clean.slice(0, 56)}…` : clean || 'Nova conversa';
 }
 
+function safeJsonParse(raw: string | null | undefined): unknown {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 export async function planAgentTurnAction(params: {
   sessionId?: string | null;
   message: string;
@@ -48,10 +57,6 @@ export async function planAgentTurnAction(params: {
       sessionId = created.id;
     }
 
-    await prisma.aiChatMessage.create({
-      data: { sessionId, role: 'user', content: cleanMsg },
-    });
-
     const payload = await runAgentPlanningTurn({
       userId: user.id,
       sessionId,
@@ -60,19 +65,23 @@ export async function planAgentTurnAction(params: {
       interactionMode: params.interactionMode,
     });
 
-    await prisma.aiChatMessage.create({
-      data: {
-        sessionId,
-        role: 'assistant',
-        content: payload.narrative,
-        responseJson: JSON.stringify({ kind: 'AGENT_TURN', payload }),
-      },
-    });
-
-    await prisma.aiChatSession.update({
-      where: { id: sessionId },
-      data: { updatedAt: new Date() },
-    });
+    await prisma.$transaction([
+      prisma.aiChatMessage.create({
+        data: { sessionId, role: 'user', content: cleanMsg },
+      }),
+      prisma.aiChatMessage.create({
+        data: {
+          sessionId,
+          role: 'assistant',
+          content: payload.narrative,
+          responseJson: JSON.stringify({ kind: 'AGENT_TURN', payload }),
+        },
+      }),
+      prisma.aiChatSession.updateMany({
+        where: { id: sessionId, userId: user.id },
+        data: { updatedAt: new Date() },
+      }),
+    ]);
 
     return { ok: true, sessionId, payload };
   } catch (err) {
@@ -87,118 +96,153 @@ export async function confirmAndExecuteAgentAction(auditLogId: string): Promise<
   | { ok: true; verified: boolean; summary: string; reversible: boolean }
   | { ok: false; error: string }
 > {
-  const user = await requireAuthenticatedUser();
-  const log = await getUserAuditLog(user.id, auditLogId);
-  if (!log) return { ok: false, error: 'Registro de operação não encontrado para o usuário.' };
-
-  // Idempotência: se já foi concluído, não duplica
-  if (log.status === 'SUCCEEDED') {
-    return {
-      ok: true,
-      verified: true,
-      summary: 'Esta operação já foi executada e verificada anteriormente (proteção contra duplicidade).',
-      reversible: true,
-    };
-  }
-
-  if (log.status !== 'AWAITING_CONFIRMATION') {
-    return { ok: false, error: `Operação em estado "${log.status}" não pode ser confirmada novamente.` };
-  }
-
-  const executor = getMutationToolExecutor(log.toolName);
-  if (!executor) {
-    return { ok: false, error: `Executor não encontrado para a ferramenta "${log.toolName}".` };
-  }
-
-  const startedAt = Date.now();
-  await updateAuditLogStatus(user.id, log.id, { status: 'EXECUTING' });
-
   try {
-    const parsedParams = JSON.parse(log.paramsJson || '{}') as Record<string, unknown>;
-    const result = await executor.executeAndVerify(user.id, parsedParams);
-    const durationMs = Date.now() - startedAt;
+    const user = await requireAuthenticatedUser();
+    const log = await getUserAuditLog(user.id, auditLogId);
+    if (!log) return { ok: false, error: 'Registro de operação não encontrado para o usuário.' };
 
-    if (!result.ok || !result.verified) {
-      await updateAuditLogStatus(user.id, log.id, {
-        status: 'FAILED',
-        errorMessage: result.error || result.summary,
-        verificationResult: result.verificationDetail ?? { verified: false },
-        durationMs,
-      });
-      return { ok: false, error: result.error || result.summary };
+    const executor = getMutationToolExecutor(log.toolName);
+
+    // Idempotência: se já foi concluído, não duplica
+    if (log.status === 'SUCCEEDED') {
+      return {
+        ok: true,
+        verified: true,
+        summary: 'Esta operação já foi executada e verificada anteriormente (proteção contra duplicidade).',
+        reversible: Boolean(executor?.rollback),
+      };
     }
 
-    await updateAuditLogStatus(user.id, log.id, {
-      status: 'SUCCEEDED',
-      afterState: result.afterState ?? null,
-      verificationResult: result.verificationDetail ?? { verified: true },
-      durationMs,
-    });
+    if (!executor) {
+      return { ok: false, error: `Executor não encontrado para a ferramenta "${log.toolName}".` };
+    }
 
-    revalidatePath('/');
-    return {
-      ok: true,
-      verified: true,
-      summary: result.summary,
-      reversible: Boolean(executor.rollback),
-    };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Erro ao executar operação confirmada.';
-    await updateAuditLogStatus(user.id, log.id, {
-      status: 'FAILED',
-      errorMessage: message,
-      durationMs: Date.now() - startedAt,
+    // Lock atômico contra cliques concorrentes (TOCTOU)
+    const claimed = await prisma.agentActionAuditLog.updateMany({
+      where: { id: log.id, userId: user.id, status: 'AWAITING_CONFIRMATION' },
+      data: { status: 'EXECUTING' },
     });
-    return { ok: false, error: message };
+    if (claimed.count !== 1) {
+      return {
+        ok: false,
+        error: `Operação em estado "${log.status}" não pode ser confirmada novamente.`,
+      };
+    }
+
+    const startedAt = Date.now();
+    try {
+      const parsedParams = (safeJsonParse(log.paramsJson) ?? {}) as Record<string, unknown>;
+      const result = await executor.executeAndVerify(user.id, parsedParams);
+      const durationMs = Date.now() - startedAt;
+
+      if (!result.ok || !result.verified) {
+        await updateAuditLogStatus(user.id, log.id, {
+          status: 'FAILED',
+          errorMessage: result.error || result.summary,
+          verificationResult: result.verificationDetail ?? { verified: false },
+          durationMs,
+        });
+        return { ok: false, error: result.error || result.summary };
+      }
+
+      await updateAuditLogStatus(user.id, log.id, {
+        status: 'SUCCEEDED',
+        afterState: result.afterState ?? null,
+        verificationResult: result.verificationDetail ?? { verified: true },
+        durationMs,
+      });
+
+      revalidatePath('/');
+      return {
+        ok: true,
+        verified: true,
+        summary: result.summary,
+        reversible: Boolean(executor.rollback),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao executar operação confirmada.';
+      await updateAuditLogStatus(user.id, log.id, {
+        status: 'FAILED',
+        errorMessage: message,
+        durationMs: Date.now() - startedAt,
+      });
+      return { ok: false, error: message };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'Erro ao confirmar operação do agente.',
+    };
   }
 }
 
 export async function cancelAgentPlanAction(auditLogId: string): Promise<{ ok: boolean }> {
-  const user = await requireAuthenticatedUser();
-  await updateAuditLogStatus(user.id, auditLogId, { status: 'CANCELLED' });
-  return { ok: true };
+  try {
+    const user = await requireAuthenticatedUser();
+    await prisma.agentActionAuditLog.updateMany({
+      where: { id: auditLogId, userId: user.id, status: 'AWAITING_CONFIRMATION' },
+      data: { status: 'CANCELLED' },
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 export async function rollbackAgentExecutionAction(
   auditLogId: string
 ): Promise<{ ok: boolean; summary: string }> {
-  const user = await requireAuthenticatedUser();
-  const log = await getUserAuditLog(user.id, auditLogId);
-  if (!log || log.status !== 'SUCCEEDED') {
-    return { ok: false, summary: 'Apenas operações concluídas podem ser desfeitas.' };
-  }
+  try {
+    const user = await requireAuthenticatedUser();
+    const log = await getUserAuditLog(user.id, auditLogId);
+    if (!log || log.status !== 'SUCCEEDED') {
+      return { ok: false, summary: 'Apenas operações concluídas podem ser desfeitas.' };
+    }
 
-  const executor = getMutationToolExecutor(log.toolName);
-  if (!executor?.rollback) {
-    return { ok: false, summary: 'Esta operação não suporta reversão automática.' };
-  }
+    const executor = getMutationToolExecutor(log.toolName);
+    if (!executor?.rollback) {
+      return { ok: false, summary: 'Esta operação não suporta reversão automática.' };
+    }
 
-  const beforeState = log.beforeStateJson ? JSON.parse(log.beforeStateJson) : null;
-  const afterState = log.afterStateJson ? JSON.parse(log.afterStateJson) : null;
-  const res = await executor.rollback(user.id, beforeState, afterState);
+    const beforeState = safeJsonParse(log.beforeStateJson);
+    const afterState = safeJsonParse(log.afterStateJson);
+    const res = await executor.rollback(user.id, beforeState, afterState);
 
-  if (res.ok) {
-    await updateAuditLogStatus(user.id, log.id, { status: 'ROLLED_BACK' });
-    revalidatePath('/');
+    if (res.ok) {
+      await prisma.agentActionAuditLog.updateMany({
+        where: { id: log.id, userId: user.id, status: 'SUCCEEDED' },
+        data: { status: 'ROLLED_BACK' },
+      });
+      revalidatePath('/');
+    }
+    return res;
+  } catch (err) {
+    return {
+      ok: false,
+      summary: err instanceof Error ? err.message : 'Falha ao desfazer a operação.',
+    };
   }
-  return res;
 }
 
 export async function listAgentAuditLogsAction() {
-  const user = await requireAuthenticatedUser();
-  const logs = await listRecentAgentAuditLogs(user.id, 20);
-  return {
-    ok: true as const,
-    logs: logs.map((l) => ({
-      id: l.id,
-      runId: l.runId,
-      modality: l.modality,
-      toolName: l.toolName,
-      riskLevel: l.riskLevel,
-      status: l.status,
-      errorMessage: l.errorMessage,
-      durationMs: l.durationMs,
-      createdAt: l.createdAt.toISOString(),
-    })),
-  };
+  try {
+    const user = await requireAuthenticatedUser();
+    const logs = await listRecentAgentAuditLogs(user.id, 20);
+    return {
+      ok: true as const,
+      logs: logs.map((l) => ({
+        id: l.id,
+        runId: l.runId,
+        modality: l.modality,
+        toolName: l.toolName,
+        riskLevel: l.riskLevel,
+        status: l.status,
+        errorMessage: l.errorMessage,
+        durationMs: l.durationMs,
+        createdAt: l.createdAt.toISOString(),
+      })),
+    };
+  } catch {
+    return { ok: false as const, logs: [] };
+  }
 }

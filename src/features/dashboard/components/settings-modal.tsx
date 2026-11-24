@@ -2,13 +2,11 @@
 
 import * as React from 'react';
 import { useWorkbench } from '@/features/dashboard/context/workbench-context';
-
 import { Settings, Sun, Moon, LogOut, RotateCcw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Modal } from '@/shared/ui/modal';
 import { FormField, Input, Select, Switch } from '@/shared/ui/input';
 import { Badge } from '@/shared/ui/badge';
-
 import { logoutAction } from '@/features/auth/actions/auth-settings.actions';
 import { useSettingsForm } from '@/features/dashboard/hooks/use-settings-reset-forms';
 import { DataExportCard } from '@/features/transactions/components/data-export-card';
@@ -25,10 +23,15 @@ export function SettingsModal() {
   } = wb;
   const isSettingsModalOpen = activeModal?.type === 'SETTINGS';
   const [isHolidaysOpen, setIsHolidaysOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isSettingsModalOpen) setIsHolidaysOpen(false);
+  }, [isSettingsModalOpen]);
+
   const {
     cfgFiscalDay, setCfgFiscalDay, cfgDefaultAccount, setCfgDefaultAccount,
     cfgHolidayState, setCfgHolidayState, cfgHolidayCity, setCfgHolidayCity,
-    isSubmitting, handleSaveUserSettings,
+    settingsError, isSubmitting, handleSaveUserSettings,
   } = useSettingsForm({
     initialFiscalDay: settings.fiscalMonthStartDay,
     initialDefaultAccount: settings.defaultAccountId || '',
@@ -46,7 +49,7 @@ export function SettingsModal() {
         subtitle="Suas preferências ficam salvas automaticamente na sua conta"
         footer={
           <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <Button variant="destructive" size="md" onClick={() => logoutAction()}>
+            <Button variant="destructive" size="md" onClick={async () => { await logoutAction(); router.refresh(); }}>
               <LogOut className="h-4 w-4" />
               Encerrar Sessão
             </Button>
@@ -62,6 +65,11 @@ export function SettingsModal() {
         }
       >
         <form id="form-user-settings" onSubmit={handleSaveUserSettings} className="space-y-6">
+          {settingsError && (
+            <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 px-4 py-2.5 text-xs font-medium text-rose-700 dark:text-rose-300">
+              {settingsError}
+            </div>
+          )}
           {/* Card do Usuário Autenticado */}
           <div className="rounded-2xl bg-slate-50/80 dark:bg-zinc-950/90 p-4 border border-slate-200/90 dark:border-zinc-800/90 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -86,7 +94,7 @@ export function SettingsModal() {
           </div>
 
           {/* Seletor Visual Rápido de Tema */}
-          <div className="space-y-2">
+          <div data-agent-id="modal.settings.section.theme" className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">
                 Aparência da Interface
@@ -136,7 +144,7 @@ export function SettingsModal() {
           </div>
 
           {/* Grid Simétrico de Preferências Operacionais */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div data-agent-id="modal.settings.section.preferences" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <FormField label="Conta Padrão para Lançar" hint="Pré-selecionada">
               <Select
                 value={cfgDefaultAccount}
@@ -163,19 +171,15 @@ export function SettingsModal() {
 
             <FormField label="Início do Ciclo Mensal" hint="1 a 31">
               <Input
-                type="number"
-                min={1}
-                max={31}
-                tabular
-                prefixText="Dia"
-                value={cfgFiscalDay}
+                data-agent-id="modal.settings.fiscalDay" type="number" min={1} max={31}
+                tabular prefixText="Dia" value={cfgFiscalDay}
                 onChange={(e) => setCfgFiscalDay(Number(e.target.value))}
               />
             </FormField>
           </div>
 
           {/* Toggle de Privacidade Padronizado */}
-          <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-slate-50/40 dark:bg-zinc-950/60 p-4">
+          <div data-agent-id="modal.settings.section.privacy" className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-slate-50/40 dark:bg-zinc-950/60 p-4">
             <div className="space-y-0.5">
               <div className="text-sm font-medium text-slate-900 dark:text-zinc-100">
                 Iniciar com Valores Ocultos (Modo Privacidade)
@@ -196,8 +200,10 @@ export function SettingsModal() {
             holidayCity={cfgHolidayCity} setHolidayCity={setCfgHolidayCity}
             onOpenHolidaysModal={() => setIsHolidaysOpen(true)}
           />
-          <DataExportCard />
-          <SnapshotBackupCard />
+          <div data-agent-id="modal.settings.section.backup" className="space-y-6">
+            <DataExportCard />
+            <SnapshotBackupCard />
+          </div>
 
           {/* Sessão Autenticada & Logout */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-slate-50/40 dark:bg-zinc-950/60 p-4">

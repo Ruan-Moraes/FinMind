@@ -85,9 +85,10 @@ export function classifyProviderError(
  */
 export function validateModelIdentityResponse(
   selectedModelId: string,
-  responseText: string
+  responseText: string,
+  explicitProvider?: AiProviderId
 ): { passed: boolean; matchedKeyword: string | null } {
-  const descriptor = getAiModelDescriptor(selectedModelId);
+  const descriptor = getAiModelDescriptor(selectedModelId, explicitProvider);
   const normalizedResponse = String(responseText || '')
     .toLowerCase()
     .replace(/\s+/g, ' ')

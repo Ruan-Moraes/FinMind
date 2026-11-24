@@ -66,6 +66,18 @@ export function useWorkbenchState(props: WorkbenchProps) {
     (settings.density as 'COMFORTABLE' | 'COMPACT') || 'COMFORTABLE'
   );
 
+  React.useEffect(() => {
+    setHideValues(settings.hideValuesByDefault);
+  }, [settings.hideValuesByDefault]);
+
+  React.useEffect(() => {
+    setTheme((settings.theme as 'LIGHT' | 'DARK' | 'SYSTEM') || 'DARK');
+  }, [settings.theme]);
+
+  React.useEffect(() => {
+    setDensity((settings.density as 'COMFORTABLE' | 'COMPACT') || 'COMFORTABLE');
+  }, [settings.density]);
+
   const [activeModal, setActiveModal] = React.useState<ActiveWorkbenchModal>(null);
   const [previewAttachment, setPreviewAttachment] = React.useState<PreviewAttachmentState | null>(
     null

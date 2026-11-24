@@ -10,8 +10,6 @@ import type { HolidayRecord } from '@/features/planning/domain/business-days';
 interface Props {
   year: number;
   holidays: HolidayRecord[];
-  stateCode: string;
-  cityName: string;
   onAddManual: (item: {
     date: string;
     name: string;

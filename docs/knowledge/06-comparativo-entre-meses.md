@@ -1,9 +1,9 @@
 ---
 docId: comparison-mom
 module: comparison
-version: 1.0.0
+version: 1.1.0
 screens: ["comparison"]
-relatedTools: ["navigate_to_section", "change_comparison_periods", "guide_feature_workflow", "capture_annotated_screen"]
+relatedTools: ["navigate_to_section", "compare_financial_periods", "render_visual_content", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["comparativo", "comparar meses", "mom", "evolucao", "variacao", "mes anterior"]
 ---
 

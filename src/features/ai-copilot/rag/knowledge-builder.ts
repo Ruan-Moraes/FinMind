@@ -1,5 +1,9 @@
 import { type Prisma } from "@prisma/client";
 import { formatCentsToBRL, MONTH_NAMES_PT } from "@/shared/lib/currency";
+import {
+  parseMonthlyOverrides,
+  parseSkippedMonths,
+} from "@/features/planning/domain/recurrence-month-skip";
 import { computeDeterministicHash } from "@/features/reconciliation/parsers";
 import { inferPurposeFromText } from "@/features/reconciliation/engine";
 import {
@@ -108,12 +112,24 @@ export function buildCandidateKnowledgeDocs(params: {
     const typeLabel =
       rule.type === 'INCOME' ? 'Ganho Estático Recorrente' : 'Custo Fixo / Obrigação Recorrente';
     const catName = rule.category?.name || 'Geral';
+    const skipped = parseSkippedMonths(rule.skippedMonths);
+    const overrides = parseMonthlyOverrides(rule.monthlyOverrides);
+    const dueLabel =
+      rule.dayType === 'BUSINESS_DAY'
+        ? `${rule.dayOfMonth}º dia útil${rule.includeSaturday ? ' (com sábado)' : ''}`
+        : `Todo dia ${rule.dayOfMonth}`;
+    const skippedNote = skipped.length > 0 ? ` | Meses pulados: ${skipped.join(', ')}` : '';
+    const overridesEntries = Object.entries(overrides).map(
+      ([ym, cents]) => `${ym}=${formatCentsToBRL(cents)}`
+    );
+    const overridesNote =
+      overridesEntries.length > 0 ? ` | Valores ajustados por mês: ${overridesEntries.join(', ')}` : '';
     const title = `Regra Fixa: ${safeDesc} (${formatCentsToBRL(rule.amountInCents)}/mês)`;
-    const contentText = `[REGRA RECORRENTE ${rule.id}] ${typeLabel}: "${safeDesc}" | Valor Mensal Previsto: ${formatCentsToBRL(
+    const contentText = `[REGRA RECORRENTE ${rule.id}] ${typeLabel}: "${safeDesc}" | Valor Mensal Base: ${formatCentsToBRL(
       rule.amountInCents
-    )} | Dia de Vencimento/Recebimento: Todo dia ${rule.dayOfMonth} | Categoria: ${catName} | Natureza: ${
+    )} | Vencimento/Recebimento: ${dueLabel} | Categoria: ${catName} | Natureza: ${
       rule.nature === 'STATIC' ? 'Fixo / Estático' : 'Variável'
-    }`;
+    }${skippedNote}${overridesNote}`;
 
     candidateDocs.push({
       sourceType: 'RECURRENCE_RULE',
@@ -129,6 +145,10 @@ export function buildCandidateKnowledgeDocs(params: {
         type: rule.type,
         nature: rule.nature,
         dayOfMonth: rule.dayOfMonth,
+        dayType: rule.dayType,
+        includeSaturday: rule.includeSaturday,
+        skippedMonths: skipped,
+        monthlyOverrides: overrides,
         categoryName: catName,
       }),
       contentHash: computeDeterministicHash(contentText),

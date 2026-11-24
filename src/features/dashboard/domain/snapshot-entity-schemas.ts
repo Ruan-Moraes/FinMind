@@ -55,6 +55,8 @@ export const snapshotRecurrenceRuleSchema = z.object({
   dayOfMonth: z.number().int().default(5),
   dayType: z.string().default('CALENDAR_DAY'),
   includeSaturday: z.boolean().default(false),
+  skippedMonths: z.string().default('[]'),
+  monthlyOverrides: z.string().default('{}'),
   isActive: z.boolean().default(true),
   categoryId: nullableString,
   accountId: nullableString,

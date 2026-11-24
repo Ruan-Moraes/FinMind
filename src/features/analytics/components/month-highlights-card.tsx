@@ -18,7 +18,7 @@ export function MonthHighlightsCard() {
     totalSplit > 0 ? (monthSummary.variableExpenseInCents / totalSplit) * 100 : 0;
 
   return (
-    <div className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 flex flex-col justify-between gap-4">
+    <div data-agent-id="overview.highlights" className="lg:col-span-5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 flex flex-col justify-between gap-4">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5 min-w-0">
           <div className="flex items-center gap-2">

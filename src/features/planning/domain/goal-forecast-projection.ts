@@ -126,7 +126,7 @@ export function computeGoalWithValueForecast(params: {
   let runningBalance = currentNetWorthInCents + (deltaByMonthOffset.get(0) || 0);
   let estimatedMonthsToReach: number | null = null;
 
-  if (runningBalance >= targetAmountInCents) {
+  if (runningBalance >= targetAmountInCents && projectedBalanceWithForecastInCents >= targetAmountInCents) {
     estimatedMonthsToReach = 0;
   } else {
     const simulationCap = Math.min(maxForecastOffset, 240);

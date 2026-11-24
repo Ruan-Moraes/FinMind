@@ -1,5 +1,5 @@
 import { formatCentsToBRL } from "@/shared/lib/currency";
-import { type AiProviderId, type AiModelId } from "@/features/ai-copilot/models";
+import { PROVIDER_STATIC_META, type AiProviderId } from "@/features/ai-copilot/domain/ai-provider-types";
 
 export interface ExtractedStatementItem {
   tempId: string;
@@ -23,50 +23,22 @@ export interface AiFinancialStatusAnalysis {
 
 export const AI_PROVIDER_META: Record<
   AiProviderId,
-  {
-    name: string;
-    subscriptionName: string;
-    webUrl: string;
-    badgeColor: string;
-    defaultModel: AiModelId;
-    models: Array<{ id: AiModelId; label: string }>;
-  }
+  { name: string; webUrl: string; badgeColor: string }
 > = {
   OPENAI: {
-    name: 'OpenAI',
-    subscriptionName: 'Ponte ChatGPT Web / API Oficial OpenAI',
-    webUrl: 'https://chatgpt.com/',
-    badgeColor: '#10b981',
-    defaultModel: 'gpt-4o-mini',
-    models: [
-      { id: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-      { id: 'gpt-4o', label: 'GPT-4o' },
-      { id: 'o3-mini', label: 'OpenAI o3-mini' },
-    ],
+    name: PROVIDER_STATIC_META.OPENAI.name,
+    webUrl: PROVIDER_STATIC_META.OPENAI.consoleUrl,
+    badgeColor: PROVIDER_STATIC_META.OPENAI.badgeColor,
   },
   GEMINI: {
-    name: 'Google Gemini',
-    subscriptionName: 'Ponte Gemini Web / Google AI Studio API',
-    webUrl: 'https://gemini.google.com/app',
-    badgeColor: '#3b82f6',
-    defaultModel: 'gemini-2.5-flash',
-    models: [
-      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
-    ],
+    name: PROVIDER_STATIC_META.GEMINI.name,
+    webUrl: PROVIDER_STATIC_META.GEMINI.consoleUrl,
+    badgeColor: PROVIDER_STATIC_META.GEMINI.badgeColor,
   },
   CLAUDE: {
-    name: 'Anthropic Claude',
-    subscriptionName: 'Ponte Claude Web / Anthropic Console API',
-    webUrl: 'https://claude.ai/new',
-    badgeColor: '#d97706',
-    defaultModel: 'claude-3-5-sonnet-latest',
-    models: [
-      { id: 'claude-3-5-haiku-latest', label: 'Claude 3.5 Haiku' },
-      { id: 'claude-3-5-sonnet-latest', label: 'Claude 3.5 Sonnet' },
-      { id: 'claude-3-7-sonnet-latest', label: 'Claude 3.7 Sonnet' },
-    ],
+    name: PROVIDER_STATIC_META.CLAUDE.name,
+    webUrl: PROVIDER_STATIC_META.CLAUDE.consoleUrl,
+    badgeColor: PROVIDER_STATIC_META.CLAUDE.badgeColor,
   },
 };
 

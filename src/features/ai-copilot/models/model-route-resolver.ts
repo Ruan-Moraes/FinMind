@@ -1,19 +1,19 @@
 import {
-  AiModelDescriptor,
-  AiProviderId,
   getAiModelDescriptor,
-  SSO_POPUP_TOKEN_PREFIX,
+  type AiModelDescriptor,
+  type AiProviderId,
 } from '@/features/ai-copilot/models/models-catalog';
 import { AI_PROVIDER_ADAPTERS } from '@/features/ai-copilot/providers/provider-adapters';
 
 /**
- * Verifica se uma string de chave armazenada é uma credencial real de API (e não um token legado de pop-up simulado).
+ * Verifica se uma string é uma chave de API real (em texto puro) pronta para autenticação HTTP.
+ * Rejeita strings vazias, curtas, criptografadas (`enc:v1:`) ou mascaradas (`••••`).
  */
 export function isAuthenticApiKey(rawKey?: string | null): boolean {
   if (!rawKey) return false;
   const trimmed = rawKey.trim();
   if (trimmed.length <= 8) return false;
-  if (trimmed.startsWith(SSO_POPUP_TOKEN_PREFIX)) return false;
+  if (trimmed.startsWith('enc:v1:')) return false;
   if (trimmed.includes('••') || trimmed.includes('...')) return false;
   return true;
 }
@@ -45,9 +45,9 @@ export function resolveDynamicModelRoute(
     geminiApiKey?: string | null;
     claudeApiKey?: string | null;
   },
-  ssoToken?: string
+  explicitProvider?: AiProviderId
 ): ResolvedModelRouteConfig {
-  const descriptor = getAiModelDescriptor(modelId);
+  const descriptor = getAiModelDescriptor(modelId, explicitProvider);
   const adapter = AI_PROVIDER_ADAPTERS[descriptor.provider];
   const rawDbValue = userKeys?.[descriptor.credentialKeyName]?.trim() || '';
 
@@ -70,9 +70,6 @@ export function resolveDynamicModelRoute(
 
   const baseHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-FinMind-Model-Id': descriptor.id,
-    'X-FinMind-Provider': descriptor.provider,
-    ...(ssoToken ? { 'X-FinMind-SSO-Token': ssoToken } : {}),
   };
 
   const { endpointUrl, headers } = adapter.buildEndpointAndHeaders({

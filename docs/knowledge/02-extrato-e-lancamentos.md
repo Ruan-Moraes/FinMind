@@ -1,9 +1,9 @@
 ---
 docId: transactions-and-ledger
 module: transactions
-version: 1.0.0
+version: 1.1.0
 screens: ["transactions", "modal:TX"]
-relatedTools: ["navigate_to_section", "apply_transaction_filters", "create_transaction", "update_transaction", "delete_transaction", "guide_feature_workflow"]
+relatedTools: ["navigate_to_section", "apply_transaction_filters", "query_expenses_and_transactions", "create_transaction", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferencia", "parcelamento", "filtro", "comprovante"]
 ---
 

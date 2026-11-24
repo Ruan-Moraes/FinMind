@@ -1,10 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { ShieldCheck, ExternalLink, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShieldCheck, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
-import { type AiConnectionMode } from '@/features/ai-copilot/providers';
 import {
   type AiPendingDeleteState,
   type SerializedAiReport,
@@ -28,21 +26,15 @@ const INITIAL_FILTERS: HealthReportsFilterState = {
 };
 
 export function FinancialHealthReportsPanel(props: {
-  connectionMode: AiConnectionMode;
-  currentProviderMeta: { name: string; subscriptionName: string };
   isRunningAnalysis: boolean;
   statusAnalysisError: string | null;
-  pastedStatusResponse: string;
-  setPastedStatusResponse: (val: string) => void;
   savedReports: SerializedAiReport[];
-  handleCopySubscriptionPrompt: (kind: 'statement' | 'status', openWebTab?: boolean) => void;
   handleGenerateStatusReport: () => void;
   setPendingDelete: (d: AiPendingDeleteState | null) => void;
 }) {
   const {
-    connectionMode, currentProviderMeta, isRunningAnalysis, statusAnalysisError,
-    pastedStatusResponse, setPastedStatusResponse, savedReports,
-    handleCopySubscriptionPrompt, handleGenerateStatusReport, setPendingDelete,
+    isRunningAnalysis, statusAnalysisError, savedReports,
+    handleGenerateStatusReport, setPendingDelete,
   } = props;
 
   const [filters, setFilters] = React.useState<HealthReportsFilterState>(INITIAL_FILTERS);
@@ -90,12 +82,6 @@ export function FinancialHealthReportsPanel(props: {
         </div>
 
         <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2.5 shrink-0 lg:ml-auto">
-          {connectionMode === 'SUBSCRIPTION' && (
-            <Button variant="secondary" size="md" onClick={() => handleCopySubscriptionPrompt('status', true)}>
-              <ExternalLink className="h-4 w-4" />
-              Copiar Dados & Consultar no {currentProviderMeta.name.split(' ')[0]}
-            </Button>
-          )}
           <Button data-agent-id="ai.btn.generateHealth" variant="primary" size="md" onClick={handleGenerateStatusReport} isLoading={isRunningAnalysis}>
             <Sparkles className="h-4 w-4" />
             Gerar Diagnóstico do Meu Status Agora
@@ -106,19 +92,6 @@ export function FinancialHealthReportsPanel(props: {
       {statusAnalysisError && (
         <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 p-3.5 text-xs font-medium text-rose-700 dark:text-rose-300">
           {statusAnalysisError}
-        </div>
-      )}
-
-      {connectionMode === 'SUBSCRIPTION' && (
-        <div className="space-y-2">
-          <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400">
-            Opcional: se você gerou a análise no seu {currentProviderMeta.subscriptionName}, cole a resposta abaixo antes de clicar em &ldquo;Gerar Diagnóstico&rdquo; (ou deixe em branco para análise instantânea):
-          </label>
-          <Input
-            placeholder="Cole aqui a resposta gerada pelo ChatGPT Plus, Gemini ou Claude (opcional)..."
-            value={pastedStatusResponse}
-            onChange={(e) => setPastedStatusResponse(e.target.value)}
-          />
         </div>
       )}
 
@@ -164,7 +137,7 @@ export function FinancialHealthReportsPanel(props: {
               variant="secondary"
               size="sm"
               disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => setPage(Math.max(1, safePage - 1))}
             >
               <ChevronLeft className="h-4 w-4" />
               Anterior
@@ -173,7 +146,7 @@ export function FinancialHealthReportsPanel(props: {
               variant="secondary"
               size="sm"
               disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => setPage(Math.min(totalPages, safePage + 1))}
             >
               Próxima
               <ChevronRight className="h-4 w-4" />

@@ -131,7 +131,7 @@ export async function getPortfolioGoalsProgress(
 ): Promise<PortfolioGoalProgress[]> {
   const [goals, allTransactions, staticRules] = await Promise.all([
     prisma.portfolioGoal.findMany({
-      where: { userId },
+      where: { userId, status: { not: 'CANCELLED' } },
       orderBy: [{ targetYear: 'asc' }, { targetMonth: 'asc' }],
     }),
     prisma.transaction.findMany({
@@ -140,6 +140,8 @@ export async function getPortfolioGoalsProgress(
         type: true,
         amountInCents: true,
         date: true,
+        financialAction: true,
+        purpose: true,
       },
     }),
     prisma.recurrenceRule.findMany({

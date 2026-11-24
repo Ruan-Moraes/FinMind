@@ -1,17 +1,21 @@
-import { type SanityCheckValidationResult, getAiModelDescriptor, findStrictAiModelDescriptor, resolveDynamicModelRoute, validateModelIdentityResponse, classifyProviderError, SANITY_CHECK_PROMPT, DEFAULT_AI_MODEL_ID } from "@/features/ai-copilot/models";
-
-import { callProviderApiText } from "@/features/ai-copilot/providers/provider-http-client";
+import {
+  classifyProviderError,
+  findStrictAiModelDescriptor,
+  resolveDynamicModelRoute,
+  SANITY_CHECK_PROMPT,
+  validateModelIdentityResponse,
+  type AiProviderId,
+  type SanityCheckValidationResult,
+} from '@/features/ai-copilot/models';
+import { callProviderApiText } from '@/features/ai-copilot/providers/provider-http-client';
 
 /**
- * Executa o Sanity Check REAL e Autêntico do modelo selecionado:
- * 1. Valida se o modelo solicitado existe no catálogo oficial (rejeita modelos inexistentes com 404).
- * 2. Verifica se o provedor possui uma chave de API real configurada (rejeita imediatamente com 401 se ausente).
- * 3. Executa chamada HTTP real para o endpoint oficial do provedor (OpenAI, Google Gemini ou Anthropic Claude) usando exatamente o modelo selecionado.
- * 4. Distingue credenciais inválidas (401), problemas de permissão (403), modelo indisponível (404), limite de cota (429) e indisponibilidade (502/503).
+ * Executa teste operacional real de inferência (sob demanda) contra o endpoint oficial
+ * do provedor selecionado usando exatamente o modelo informado.
  */
 export async function executeModelSanityCheck(params: {
   modelId: string;
-  ssoToken?: string;
+  provider?: AiProviderId;
   customPrompt?: string;
   userKeys?: {
     openaiApiKey?: string | null;
@@ -25,26 +29,23 @@ export async function executeModelSanityCheck(params: {
       ? params.customPrompt.trim()
       : SANITY_CHECK_PROMPT;
 
-  // 1. Verifica se o identificador do modelo existe no catálogo
-  const strictDescriptor = findStrictAiModelDescriptor(params.modelId);
+  const strictDescriptor = findStrictAiModelDescriptor(params.modelId, params.provider);
   if (!strictDescriptor) {
-    const fallbackDescriptor = getAiModelDescriptor(DEFAULT_AI_MODEL_ID);
     const latencyMs = Math.max(1, Date.now() - startTime);
     return {
       passed: false,
       diagnosticCode: 'MODEL_UNAVAILABLE',
-      selectedModelId: fallbackDescriptor.id,
-      selectedModelName: String(params.modelId || 'Modelo Desconhecido'),
-      provider: fallbackDescriptor.provider,
+      selectedModelId: String(params.modelId || ''),
+      selectedModelName: String(params.modelId || 'Modelo não selecionado'),
+      provider: params.provider || 'OPENAI',
       promptSent: effectivePrompt,
       rawResponse: '',
       matchedKeyword: null,
-      endpointRouted: fallbackDescriptor.endpointUrl,
+      endpointRouted: '',
       credentialSource: 'NONE',
-      authenticatedAccountEmail: null,
       ssoVerified: false,
-      httpStatus: 404,
-      error: `O modelo "${params.modelId}" não existe ou não é suportado. Selecione um modelo oficial válido no catálogo.`,
+      httpStatus: 400,
+      error: 'Selecione um modelo válido antes de executar o teste operacional.',
       latencyMs,
       checkedAt: new Date().toISOString(),
     };
@@ -53,11 +54,10 @@ export async function executeModelSanityCheck(params: {
   const routeConfig = resolveDynamicModelRoute(
     strictDescriptor.id,
     params.userKeys,
-    params.ssoToken
+    strictDescriptor.provider
   );
   const { model } = routeConfig;
 
-  // 2. Verifica se existe chave de API real para ESTE provedor específico
   if (!routeConfig.hasExternalApiKey) {
     const latencyMs = Math.max(1, Date.now() - startTime);
     return {
@@ -71,19 +71,17 @@ export async function executeModelSanityCheck(params: {
       matchedKeyword: null,
       endpointRouted: model.endpointUrl,
       credentialSource: 'NONE',
-      authenticatedAccountEmail: null,
       ssoVerified: false,
       httpStatus: 401,
-      error: `Nenhuma chave de API oficial (${model.envVarName}) configurada para ${model.providerGroupLabel}. Configure uma chave válida para testar e usar o modelo ${model.displayName}.`,
+      error: `Nenhuma chave de API oficial (${model.envVarName}) configurada para ${model.providerGroupLabel}.`,
       latencyMs,
       checkedAt: new Date().toISOString(),
     };
   }
 
   const systemInstruction =
-    'Você é um assistente financeiro integrado ao sistema FinMind. Responda sempre em português do Brasil de forma objetiva, precisa e transparente. Se perguntado sobre seu modelo, informe seu modelo e provedor reais sem inventar informações.';
+    'Você é um assistente financeiro integrado ao sistema FinMind. Responda sempre em português do Brasil de forma objetiva e transparente. Se perguntado sobre seu modelo, informe seu modelo e provedor reais sem inventar informações.';
 
-  // 3. Executa a chamada HTTP REAL para o provedor oficial
   try {
     const rawResponseText = await callProviderApiText({
       routeConfig,
@@ -92,11 +90,10 @@ export async function executeModelSanityCheck(params: {
     });
 
     const latencyMs = Math.max(1, Date.now() - startTime);
-    const validation = validateModelIdentityResponse(model.id, rawResponseText);
+    const validation = validateModelIdentityResponse(model.id, rawResponseText, model.provider);
     const isCustomQuestion =
       effectivePrompt.toLowerCase() !== SANITY_CHECK_PROMPT.toLowerCase();
-    const passed =
-      rawResponseText.trim().length > 0 && (validation.passed || isCustomQuestion);
+    const passed = rawResponseText.trim().length > 0 && (validation.passed || isCustomQuestion);
 
     return {
       passed,
@@ -109,12 +106,11 @@ export async function executeModelSanityCheck(params: {
       matchedKeyword: validation.matchedKeyword || model.displayName,
       endpointRouted: model.endpointUrl,
       credentialSource: routeConfig.resolvedCredentialSource,
-      authenticatedAccountEmail: null,
       ssoVerified: passed,
       httpStatus: passed ? 200 : 422,
       error: passed
         ? null
-        : `A resposta recebida do provedor ("${rawResponseText.slice(0, 120)}") não confirmou a identidade de ${model.displayName}.`,
+        : `A resposta recebida não confirmou a identidade de ${model.displayName}.`,
       latencyMs,
       checkedAt: new Date().toISOString(),
     };
@@ -139,7 +135,6 @@ export async function executeModelSanityCheck(params: {
       matchedKeyword: null,
       endpointRouted: model.endpointUrl,
       credentialSource: routeConfig.resolvedCredentialSource,
-      authenticatedAccountEmail: null,
       ssoVerified: false,
       httpStatus,
       error: errorMessage,

@@ -2,7 +2,13 @@ import { AccountWithBalance, CreditCardWithSummary, MonthSummaryData, MoMCompari
 export function computeCurrentNetWorthAndPace(params: {
   accounts: AccountWithBalance[];
   cards: CreditCardWithSummary[];
-  completedTransactions: Array<{ type: string; amountInCents: number; date: Date }>;
+  completedTransactions: Array<{
+    type: string;
+    amountInCents: number;
+    date: Date;
+    financialAction?: string | null;
+    purpose?: string | null;
+  }>;
   staticRules: Array<{ type: string; amountInCents: number }>;
   referenceDate?: Date;
 }): {
@@ -29,7 +35,11 @@ export function computeCurrentNetWorthAndPace(params: {
     if (tx.type === 'INCOME') {
       monthlyNets.set(key, prev + tx.amountInCents);
       monthlyIncomes.set(key, (monthlyIncomes.get(key) || 0) + tx.amountInCents);
-    } else if (tx.type === 'EXPENSE') {
+    } else if (
+      tx.type === 'EXPENSE' &&
+      tx.financialAction !== 'CREDIT_CARD_BILL_PAYMENT' &&
+      tx.purpose !== 'CREDIT_CARD_BILL'
+    ) {
       monthlyNets.set(key, prev - tx.amountInCents);
     }
   }
@@ -130,25 +140,12 @@ export function computeSingleGoalProjection(params: {
     ? 0
     : Math.max(0, recommendedMonthlyContributionInCents - Math.max(0, currentMonthlyPaceInCents));
   return {
-    id: goal.id,
-    title: goal.title,
-    targetAmountInCents: goal.targetAmountInCents,
-    currentNetWorthInCents,
-    progressPercent,
-    remainingDistanceInCents,
-    isAchieved,
-    targetMonth: goal.targetMonth,
-    targetYear: goal.targetYear,
-    monthsRemaining: Math.max(0, monthsDiff),
-    recommendedMonthlyContributionInCents,
-    currentMonthlyPaceInCents,
-    estimatedMonthsToReach,
-    estimatedCompletionMonth,
-    estimatedCompletionYear,
-    willReachOnTime,
-    paceStatus,
-    monthlyPaceGapInCents,
-    notes: goal.notes,
+    id: goal.id, title: goal.title, targetAmountInCents: goal.targetAmountInCents,
+    currentNetWorthInCents, progressPercent, remainingDistanceInCents, isAchieved,
+    targetMonth: goal.targetMonth, targetYear: goal.targetYear,
+    monthsRemaining: Math.max(0, monthsDiff), recommendedMonthlyContributionInCents,
+    currentMonthlyPaceInCents, estimatedMonthsToReach, estimatedCompletionMonth,
+    estimatedCompletionYear, willReachOnTime, paceStatus, monthlyPaceGapInCents, notes: goal.notes,
   };
 }
 export function computeStaticBaselineMetrics(

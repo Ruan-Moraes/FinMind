@@ -73,9 +73,10 @@ export function TransactionsTab() {
                 <span>Exportar CSV</span>
               </a>
             </div>
-            <TransactionsMobileCards />
-            {/* Tabela Desktop de Lançamentos */}
-            <div data-agent-id="transactions.table" className="hidden md:block rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+            <div data-agent-id="transactions.table">
+              <TransactionsMobileCards />
+              {/* Tabela Desktop de Lançamentos */}
+              <div className="hidden md:block rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left border-collapse">
                   <thead className="text-[11px] font-medium uppercase tracking-wider bg-slate-50 dark:bg-zinc-950/60 text-slate-400 dark:text-zinc-500 border-b border-slate-200 dark:border-zinc-800">
@@ -239,6 +240,7 @@ export function TransactionsTab() {
                   </tbody>
                 </table>
               </div>
+            </div>
             </div>
           </div>
   );

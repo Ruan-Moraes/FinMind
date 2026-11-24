@@ -1,21 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import { MessageSquare, Send, X } from 'lucide-react';
+import { MessageSquare, X } from 'lucide-react';
 import { useWorkbench } from '@/features/dashboard/context/workbench-context';
-import { Button } from '@/shared/ui/button';
-import { Input } from '@/shared/ui/input';
 import { useFloatingChatbot } from '@/features/ai-copilot/hooks/use-floating-chatbot';
 import { FloatingChatHeader } from '@/features/ai-copilot/components/floating-chat-header';
 import { FloatingChatMessage } from '@/features/ai-copilot/components/floating-chat-message';
 import { FloatingChatHistoryDrawer } from '@/features/ai-copilot/components/floating-chat-history-drawer';
+import { FloatingChatComposer } from '@/features/ai-copilot/components/floating-chat-composer';
 import { AgentTurnMessage } from '@/features/ai-agent/components/agent-turn-message';
 
 const SUGGESTED_PROMPTS = [
+  'Gere um gráfico de pizza sobre minhas metas.',
+  'Compare meus gastos dos últimos meses.',
   'Como faço para cadastrar uma nova meta financeira?',
-  'Tire um print anotado das metas e custos estáticos',
-  'Mostre um gráfico dos meus maiores gastos por categoria',
-  'Filtre o extrato apenas por despesas',
+  'Gere um relatório financeiro do mês atual.',
 ];
 
 export function FloatingAiChatbot() {
@@ -46,12 +45,10 @@ export function FloatingAiChatbot() {
           <FloatingChatHeader
             showHistory={showHistory}
             isExpanded={isExpanded}
-            mode={runtime.mode}
             onToggleHistory={() => setShowHistory((v) => !v)}
             onNewSession={handleStartNewSession}
             onToggleExpand={() => setIsExpanded((v) => !v)}
             onClose={() => setIsOpen(false)}
-            onChangeMode={runtime.setMode}
           />
 
           {showHistory ? (
@@ -163,30 +160,12 @@ export function FloatingAiChatbot() {
             </div>
           )}
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void sendQuestion();
-            }}
-            className="p-3 bg-white dark:bg-zinc-950 border-t border-slate-200 dark:border-zinc-800 flex items-center gap-2"
-          >
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Peça para executar, ensinar, capturar tela ou analisar..."
-              className="flex-1 text-xs"
-            />
-            <Button
-              type="submit"
-              variant="primary"
-              size="icon"
-              disabled={isLoading || !input.trim()}
-              aria-label="Enviar pergunta ao assistente IA"
-              className="h-10 w-10 shrink-0"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+          <FloatingChatComposer
+            input={input}
+            setInput={setInput}
+            isLoading={isLoading}
+            onSubmit={() => void sendQuestion()}
+          />
         </aside>
       )}
 

@@ -35,7 +35,7 @@ export function TransactionFormModal() {
             <Button variant="secondary" onClick={closeModal}>
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" form="form-new-tx" isLoading={isSubmitting}>
+            <Button data-agent-id="modal.tx.btn.submit" variant="primary" type="submit" form="form-new-tx" isLoading={isSubmitting}>
               {editingTxId ? 'Salvar Alterações' : 'Salvar Lançamento'}
             </Button>
           </>
@@ -73,6 +73,7 @@ export function TransactionFormModal() {
             <FormField label="Valor do Lançamento" htmlFor="tx-amount" hint="Ex: 150,00">
               <Input
                 id="tx-amount"
+                data-agent-id="modal.tx.input.amount"
                 tabular
                 prefixText="R$"
                 placeholder="0,00" value={txAmount}
@@ -83,6 +84,7 @@ export function TransactionFormModal() {
             <FormField label="Data do Lançamento" htmlFor="tx-date">
               <Input
                 id="tx-date"
+                data-agent-id="modal.tx.input.date"
                 type="date"
                 tabular value={txDate}
                 onChange={(e) => setTxDate(e.target.value)}
@@ -93,6 +95,7 @@ export function TransactionFormModal() {
           <FormField label="Descrição" htmlFor="tx-desc">
             <Input
               id="tx-desc"
+              data-agent-id="modal.tx.input.description"
               placeholder="Ex: Supermercado, Kit Peças, Aluguel, Salário..." value={txDesc}
               onChange={(e) => setTxDesc(e.target.value)}
               required

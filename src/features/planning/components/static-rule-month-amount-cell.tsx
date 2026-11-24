@@ -41,22 +41,28 @@ export function StaticRuleMonthAmountCell({
   const [internalEditing, setInternalEditing] = React.useState(false);
   const [draft, setDraft] = React.useState('');
   const [isSaving, setIsSaving] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const wasEditingRef = React.useRef(false);
 
   const editing = isEditing !== undefined ? isEditing : internalEditing;
 
   React.useEffect(() => {
-    if (editing) {
+    if (editing && !wasEditingRef.current) {
       setDraft((effectiveAmountInCents / 100).toFixed(2).replace('.', ','));
+      setErrorMsg(null);
     }
+    wasEditingRef.current = editing;
   }, [editing, effectiveAmountInCents]);
 
   const openEditor = () => {
     setDraft((effectiveAmountInCents / 100).toFixed(2).replace('.', ','));
+    setErrorMsg(null);
     if (onStartEdit) onStartEdit();
     else setInternalEditing(true);
   };
 
   const closeEditor = () => {
+    setErrorMsg(null);
     if (onStopEdit) onStopEdit();
     else setInternalEditing(false);
   };
@@ -64,6 +70,7 @@ export function StaticRuleMonthAmountCell({
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
     setIsSaving(true);
+    setErrorMsg(null);
     try {
       const res = await setRecurrenceRuleMonthOverrideAction({
         id: ruleId,
@@ -74,7 +81,11 @@ export function StaticRuleMonthAmountCell({
       if (res.ok) {
         closeEditor();
         onSaved();
+      } else {
+        setErrorMsg(res.error || 'Valor inválido.');
       }
+    } catch {
+      setErrorMsg('Erro ao salvar valor.');
     } finally {
       setIsSaving(false);
     }
@@ -82,15 +93,22 @@ export function StaticRuleMonthAmountCell({
 
   const handleResetToBase = async () => {
     setIsSaving(true);
+    setErrorMsg(null);
     try {
-      await setRecurrenceRuleMonthOverrideAction({
+      const res = await setRecurrenceRuleMonthOverrideAction({
         id: ruleId,
         month: selectedMonth,
         year: selectedYear,
         amountRaw: null,
       });
-      closeEditor();
-      onSaved();
+      if (res.ok) {
+        closeEditor();
+        onSaved();
+      } else {
+        setErrorMsg(res.error || 'Não foi possível restaurar.');
+      }
+    } catch {
+      setErrorMsg('Erro ao restaurar valor.');
     } finally {
       setIsSaving(false);
     }
@@ -103,53 +121,60 @@ export function StaticRuleMonthAmountCell({
 
   if (editing) {
     return (
-      <form
-        onSubmit={(e) => void handleSave(e)}
-        className={`flex items-center gap-1 ${formJustify}`}
-      >
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') closeEditor();
-          }}
-          aria-label="Valor ajustado para este mês"
-          placeholder="0,00"
-          autoFocus
-          className="w-24 h-7 px-2 rounded-lg border border-indigo-400 dark:border-indigo-600 bg-white dark:bg-zinc-900 text-xs font-semibold tabular-nums text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
-        />
-        <button
-          type="submit"
-          disabled={isSaving}
-          title="Salvar valor apenas para este mês"
-          aria-label="Salvar valor do mês"
-          className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
+      <div className={`flex flex-col ${stackAlign} gap-1`}>
+        <form
+          onSubmit={(e) => void handleSave(e)}
+          className={`flex items-center gap-1 ${formJustify}`}
         >
-          <Check className="h-3.5 w-3.5" />
-        </button>
-        {hasOverride && (
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') closeEditor();
+            }}
+            aria-label="Valor ajustado para este mês"
+            placeholder="0,00"
+            autoFocus
+            className="w-24 h-7 px-2 rounded-lg border border-indigo-400 dark:border-indigo-600 bg-white dark:bg-zinc-900 text-xs font-semibold tabular-nums text-slate-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+          />
+          <button
+            type="submit"
+            disabled={isSaving}
+            title="Salvar valor apenas para este mês"
+            aria-label="Salvar valor do mês"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </button>
+          {hasOverride && (
+            <button
+              type="button"
+              disabled={isSaving}
+              onClick={() => void handleResetToBase()}
+              title="Voltar ao valor padrão mensal"
+              aria-label="Restaurar valor padrão"
+              className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-500 hover:text-amber-500"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
-            disabled={isSaving}
-            onClick={() => void handleResetToBase()}
-            title="Voltar ao valor padrão mensal"
-            aria-label="Restaurar valor padrão"
-            className="h-7 w-7 inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-zinc-700 text-slate-500 hover:text-amber-500"
+            onClick={closeEditor}
+            title="Cancelar"
+            aria-label="Cancelar ajuste do mês"
+            className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
           >
-            <RotateCcw className="h-3.5 w-3.5" />
+            <X className="h-3.5 w-3.5" />
           </button>
+        </form>
+        {errorMsg && (
+          <span className="text-[11px] font-medium text-rose-600 dark:text-rose-400">
+            {errorMsg}
+          </span>
         )}
-        <button
-          type="button"
-          onClick={closeEditor}
-          title="Cancelar"
-          aria-label="Cancelar ajuste do mês"
-          className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </form>
+      </div>
     );
   }
 

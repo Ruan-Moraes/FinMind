@@ -67,7 +67,7 @@ export async function updateUserSettingsAction(data: {
   }
 
   const valid = parsed.data;
-  const updated = await prisma.userSettings.upsert({
+  await prisma.userSettings.upsert({
     where: { userId: user.id },
     create: {
       userId: user.id,
@@ -101,7 +101,7 @@ export async function updateUserSettingsAction(data: {
   });
 
   revalidatePath('/');
-  return { ok: true, settings: updated };
+  return { ok: true };
 }
 
 export async function resetAllFinancialDataAction(

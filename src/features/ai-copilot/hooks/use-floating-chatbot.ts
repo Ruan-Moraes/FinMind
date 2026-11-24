@@ -76,7 +76,7 @@ export function useFloatingChatbot() {
         setMessages(
           res.messages.map((m) => ({
             id: m.id, role: m.role, text: m.content, response: m.response, agentPayload: m.agentPayload,
-            mutationState: m.agentPayload?.pendingMutation ? { status: 'AWAITING' } : undefined,
+            mutationState: m.agentPayload?.pendingMutation ? { status: m.mutationStatus || 'AWAITING' } : undefined,
           }))
         );
       }
@@ -195,43 +195,43 @@ export function useFloatingChatbot() {
 
   const handleConfirmMutation = async (msgId: string, mutation: PendingAgentMutation) => {
     updateMsgMutationState(msgId, { status: 'RUNNING' });
-
-    if (mutation.postConfirmVisualSteps.length > 0) {
-      const vis = await runtime.runVisualSequence(mutation.postConfirmVisualSteps);
-      if (vis.interrupted) {
-        updateMsgMutationState(msgId, { status: 'AWAITING' });
-        return;
+    try {
+      if (mutation.postConfirmVisualSteps.length > 0) {
+        const vis = await runtime.runVisualSequence(mutation.postConfirmVisualSteps);
+        if (vis.interrupted) { updateMsgMutationState(msgId, { status: 'AWAITING' }); return; }
       }
-    }
-
-    runtime.setStatus('VERIFYING');
-    const res = await confirmAndExecuteAgentAction(mutation.auditLogId);
-    runtime.setStatus('IDLE');
-
-    if (res.ok && res.verified) {
-      updateMsgMutationState(msgId, { status: 'SUCCEEDED', resultText: res.summary });
-      router.refresh();
-    } else {
-      updateMsgMutationState(msgId, {
-        status: 'FAILED',
-        resultText: !res.ok ? res.error : 'Não foi possível confirmar a gravação no banco.',
-      });
+      runtime.setStatus('VERIFYING');
+      const res = await confirmAndExecuteAgentAction(mutation.auditLogId);
+      runtime.setStatus('IDLE');
+      if (res.ok && res.verified) {
+        updateMsgMutationState(msgId, { status: 'SUCCEEDED', resultText: res.summary });
+        router.refresh();
+      } else {
+        updateMsgMutationState(msgId, { status: 'FAILED', resultText: !res.ok ? res.error : 'Não foi possível confirmar a gravação no banco.' });
+      }
+    } catch {
+      runtime.setStatus('IDLE');
+      updateMsgMutationState(msgId, { status: 'FAILED', resultText: 'Erro de comunicação ao confirmar a operação.' });
     }
   };
 
   const handleCancelMutation = async (msgId: string, mutation: PendingAgentMutation) => {
-    await cancelAgentPlanAction(mutation.auditLogId);
-    updateMsgMutationState(msgId, { status: 'CANCELLED' });
+    try {
+      await cancelAgentPlanAction(mutation.auditLogId);
+      updateMsgMutationState(msgId, { status: 'CANCELLED' });
+    } catch {
+      updateMsgMutationState(msgId, { status: 'FAILED', resultText: 'Não foi possível cancelar a operação.' });
+    }
   };
 
   const handleRollbackMutation = async (msgId: string, mutation: PendingAgentMutation) => {
     updateMsgMutationState(msgId, { status: 'RUNNING' });
-    const res = await rollbackAgentExecutionAction(mutation.auditLogId);
-    if (res.ok) {
-      updateMsgMutationState(msgId, { status: 'ROLLED_BACK', resultText: res.summary });
-      router.refresh();
-    } else {
-      updateMsgMutationState(msgId, { status: 'FAILED', resultText: res.summary });
+    try {
+      const res = await rollbackAgentExecutionAction(mutation.auditLogId);
+      if (res.ok) { updateMsgMutationState(msgId, { status: 'ROLLED_BACK', resultText: res.summary }); router.refresh(); }
+      else updateMsgMutationState(msgId, { status: 'FAILED', resultText: res.summary });
+    } catch {
+      updateMsgMutationState(msgId, { status: 'FAILED', resultText: 'Erro de comunicação ao desfazer a operação.' });
     }
   };
 

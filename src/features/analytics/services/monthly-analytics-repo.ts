@@ -12,6 +12,12 @@ import {
 } from '@/features/planning/domain/goal-calculator';
 import { resolveEffectiveRulesForMonth } from '@/features/planning/domain/recurrence-month-skip';
 
+const isCreditCardBillPayment = (tx: {
+  financialAction?: string | null;
+  purpose?: string | null;
+}) =>
+  tx.financialAction === 'CREDIT_CARD_BILL_PAYMENT' || tx.purpose === 'CREDIT_CARD_BILL';
+
 /**
  * Calcula os indicadores detalhados de um mês específico.
  */
@@ -59,7 +65,7 @@ export async function getMonthSummary(
       } else {
         variableIncomeInCents += tx.amountInCents;
       }
-    } else if (tx.type === 'EXPENSE') {
+    } else if (tx.type === 'EXPENSE' && !isCreditCardBillPayment(tx)) {
       totalExpenseInCents += tx.amountInCents;
       if (tx.nature === 'STATIC') {
         staticExpenseInCents += tx.amountInCents;
@@ -190,6 +196,8 @@ export async function getSixMonthsHistory(
       nature: true,
       amountInCents: true,
       date: true,
+      financialAction: true,
+      purpose: true,
     },
   });
 
@@ -202,7 +210,7 @@ export async function getSixMonthsHistory(
 
     if (tx.type === 'INCOME') {
       bucket.totalIncomeInCents += tx.amountInCents;
-    } else if (tx.type === 'EXPENSE') {
+    } else if (tx.type === 'EXPENSE' && !isCreditCardBillPayment(tx)) {
       bucket.totalExpenseInCents += tx.amountInCents;
       if (tx.nature === 'STATIC') {
         bucket.staticExpenseInCents += tx.amountInCents;

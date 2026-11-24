@@ -16,11 +16,19 @@ export function AgentVisualStage() {
     spotlightState,
     togglePause,
     stopExecution,
+    dismissCoachmark,
+    prevCoachmarkStep,
+    nextCoachmarkStep,
   } = useAgentRuntime();
 
   return (
     <>
-      <AiElementSpotlight state={spotlightState} />
+      <AiElementSpotlight
+        state={spotlightState}
+        onPrev={prevCoachmarkStep}
+        onNext={nextCoachmarkStep}
+        onDismiss={dismissCoachmark}
+      />
       <AiVirtualCursor state={cursorState} />
       <AiExecutionControlPill
         status={status}

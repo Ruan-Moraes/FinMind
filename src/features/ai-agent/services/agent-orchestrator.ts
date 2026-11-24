@@ -1,6 +1,6 @@
 import { prisma } from '@/shared/lib/prisma';
-import { executeContextualFinancialAssistant } from '@/features/ai-copilot/assistant';
-import { getAiModelDescriptor, resolveDynamicModelRoute } from '@/features/ai-copilot/models';
+import { getAiModelDescriptor } from '@/features/ai-copilot/models';
+import { resolveActiveUserAiSelection } from '@/features/ai-copilot/services/ai-credentials-service';
 import { detectBlockedSecurityIntent } from '@/features/ai-agent/domain/agent-risk-policy';
 import type {
   AgentInteractionMode,
@@ -13,13 +13,42 @@ import {
   generateIdempotencyKey,
   generateRunId,
 } from '@/features/ai-agent/services/agent-audit-service';
+import type { AgentConversationMessage } from '@/features/ai-agent/services/agent-tool-provider-client';
+import { detectDeterministicToolCalls } from '@/features/ai-agent/services/agent-intent-router';
 import {
-  callAgentProviderWithTools,
-  type ProviderToolCallResult,
-} from '@/features/ai-agent/services/agent-tool-provider-client';
-import { detectDeterministicToolCall } from '@/features/ai-agent/services/agent-intent-router';
-import { dispatchSelectedAgentTool } from '@/features/ai-agent/services/agent-tool-plan-builder';
-import { AGENT_TOOL_DECLARATIONS } from '@/features/ai-agent/tools/tool-catalog';
+  buildNonFinancialFallbackReply,
+  detectConversationalReply,
+  isFinancialAnalyticsQuery,
+} from '@/features/ai-agent/services/agent-conversational-classifier';
+import { composeAgentTurnFromTools } from '@/features/ai-agent/services/agent-tool-plan-builder';
+import { runLocalGroundedAnalyticsFallback } from '@/features/ai-agent/services/agent-local-fallback-planner';
+import {
+  buildAgentSystemPrompt,
+  runLiveAgentToolLoop,
+} from '@/features/ai-agent/services/agent-react-loop';
+import { loadAnalyticsExecutionContext } from '@/features/ai-agent/tools/tool-executors-analytics';
+
+async function loadRecentSessionHistory(
+  sessionId: string | null | undefined,
+  userId: string
+): Promise<AgentConversationMessage[]> {
+  if (!sessionId) return [];
+  const owned = await prisma.aiChatSession.findFirst({
+    where: { id: sessionId, userId },
+    select: { id: true },
+  });
+  if (!owned) return [];
+  const rows = await prisma.aiChatMessage.findMany({
+    where: { sessionId },
+    orderBy: { createdAt: 'desc' },
+    take: 8,
+    select: { role: true, content: true },
+  });
+  return rows.reverse().map((r) => ({
+    role: r.role === 'user' ? 'user' : 'assistant',
+    content: r.content.slice(0, 700),
+  }));
+}
 
 export async function runAgentPlanningTurn(params: {
   userId: string;
@@ -32,165 +61,132 @@ export async function runAgentPlanningTurn(params: {
   const runId = generateRunId();
   const cleanMsg = message.trim();
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { settings: true },
-  });
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { settings: true } });
   if (!user) throw new Error('Usuário autenticado não encontrado.');
 
   // 1. Guarda de Segurança (ações bloqueadas como Reset Geral / credenciais)
   const blockedCheck = detectBlockedSecurityIntent(cleanMsg);
   if (blockedCheck.blocked) {
     await createAgentAuditLog({
-      userId,
-      sessionId,
-      runId,
+      userId, sessionId, runId,
       idempotencyKey: generateIdempotencyKey(runId, 'blocked_security_intent'),
-      modality: 'INTERACTIVE_GUIDE',
-      toolName: 'reset_all_data',
-      riskLevel: 'BLOCKED',
-      status: 'CANCELLED',
-      rawParams: { message: cleanMsg },
-      errorMessage: blockedCheck.reason,
+      modality: 'INTERACTIVE_GUIDE', toolName: 'reset_all_data', riskLevel: 'BLOCKED',
+      status: 'CANCELLED', rawParams: { message: cleanMsg }, errorMessage: blockedCheck.reason,
     });
     return {
-      runId,
-      modality: 'INTERACTIVE_GUIDE',
-      narrative: blockedCheck.reason!,
-      providerUsed: 'FINMIND_SECURITY_GUARD',
-      modelUsed: 'Política de Segurança do Agente',
-      executionMode: 'DETERMINISTIC_AGENT_LOCAL',
-      systemSources: [],
+      runId, modality: 'INTERACTIVE_GUIDE', narrative: blockedCheck.reason!,
+      providerUsed: 'FINMIND_SECURITY_GUARD', modelUsed: 'Política de Segurança do Agente',
+      executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: [],
       visualSteps: [
         { id: 'sec1', action: 'OPEN_MODAL', modalType: 'SETTINGS', targetId: 'header.btn.settings', caption: 'Abrindo Configurações (orientação segura)' },
-        { id: 'sec2', action: 'HIGHLIGHT', targetId: 'modal.settings.dangerZone', caption: 'Zona de Perigo: exige sua confirmação manual', pauseMs: 750 },
+        {
+          id: 'sec2', action: 'SCROLL_TO', targetId: 'modal.settings.dangerZone',
+          caption: 'Zona de Perigo: exige confirmação manual',
+          tooltipTitle: 'Ação Bloqueada por Segurança',
+          tooltipBody: 'Operações destrutivas exigem confirmação manual com seu nome completo.',
+          tone: 'amber', persistCoachmark: true, pauseMs: 750,
+        },
       ],
-      dryRunGuide: true,
+      dryRunGuide: true, answeredAt: new Date().toISOString(),
+    };
+  }
+
+  const [systemKb, historyMessages, analyticsCtx, activeAi] = await Promise.all([
+    retrieveSystemKnowledge({ query: cleanMsg, activeTab: uiState.activeTab, topK: 5 }),
+    loadRecentSessionHistory(sessionId, userId),
+    loadAnalyticsExecutionContext(userId, uiState.selectedMonth, uiState.selectedYear),
+    resolveActiveUserAiSelection(userId),
+  ]);
+  const systemSources = systemKb.chunks.map((c) => ({
+    docId: c.docId, module: c.module, sectionPath: c.sectionPath, score: c.score,
+  }));
+
+  const descriptor = activeAi.modelId
+    ? getAiModelDescriptor(activeAi.modelId, activeAi.provider)
+    : null;
+
+  let apiWarning: string | null = null;
+
+  // 2. Loop Agêntico Multi-Etapas com o Modelo Real Selecionado pelo Usuário
+  if (activeAi.hasKey && descriptor) {
+    try {
+      const kbBlock = systemKb.chunks.map((c) => c.contentText).join('\n\n');
+      const systemInstruction = buildAgentSystemPrompt({ uiState, interactionMode, kbBlock });
+      const loopResult = await runLiveAgentToolLoop({
+        provider: activeAi.provider, apiKey: activeAi.apiKey, modelId: descriptor.id,
+        systemInstruction, historyMessages, cleanMsg, analyticsCtx,
+      });
+
+      return composeAgentTurnFromTools({
+        userId, sessionId, runId,
+        actionTools: loopResult.actionTools,
+        contentBlocks: loopResult.contentBlocks,
+        interactionMode,
+        llmNarrative: loopResult.finalNarrative,
+        executionMode: 'LIVE_AGENT_TOOLS',
+        providerLabel: descriptor.providerGroupLabel,
+        modelLabel: descriptor.displayName,
+        systemSources: loopResult.actionTools.length > 0 ? systemSources : [],
+        topSectionPath: systemKb.chunks[0]?.sectionPath,
+        apiWarning: null,
+        executionTrace: loopResult.executionTrace,
+      });
+    } catch (err) {
+      apiWarning =
+        err instanceof Error
+          ? `Provedor ${descriptor.displayName} indisponível (${err.message}); operando com motor determinístico local sobre seus dados reais.`
+          : 'Provedor externo indisponível; operando em modo local.';
+    }
+  } else if (activeAi.hasKey && !descriptor) {
+    apiWarning =
+      'Provedor conectado, mas nenhum modelo foi selecionado. Escolha um modelo no seletor do Header ou na aba Copiloto IA.';
+  }
+
+  // 3. Contingência Local Honesta (quando não há chave de API configurada ou houve falha de rede)
+  const conversationalReply = detectConversationalReply(cleanMsg);
+  if (conversationalReply) {
+    return {
+      runId, modality: 'ANALYTICAL', narrative: conversationalReply,
+      providerUsed: 'FINMIND_AGENT_LOCAL', modelUsed: 'Assistente Local',
+      executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: [], visualSteps: [],
+      dryRunGuide: false, apiWarning, answeredAt: new Date().toISOString(),
+    };
+  }
+
+  const deterministicTools = detectDeterministicToolCalls(cleanMsg, uiState);
+  if (deterministicTools.length > 0) {
+    return composeAgentTurnFromTools({
+      userId, sessionId, runId, actionTools: deterministicTools, contentBlocks: [],
+      interactionMode, llmNarrative: '', executionMode: 'DETERMINISTIC_AGENT_LOCAL',
+      providerLabel: 'FINMIND_AGENT_LOCAL', modelLabel: 'Motor Determinístico Local',
+      systemSources, topSectionPath: systemKb.chunks[0]?.sectionPath, apiWarning,
+      executionTrace: {
+        iterations: 1,
+        retriedForAlignment: false,
+        steps: deterministicTools.map((t) => ({ toolName: t.name, phase: 'UI_ACTION', status: 'OK', durationMs: 0 })),
+      },
+    });
+  }
+
+  if (isFinancialAnalyticsQuery(cleanMsg)) {
+    const localAnalytics = await runLocalGroundedAnalyticsFallback(cleanMsg, analyticsCtx);
+    return {
+      runId, modality: 'ANALYTICAL', narrative: localAnalytics.narrative,
+      providerUsed: 'FINMIND_AGENT_LOCAL', modelUsed: 'Motor Analítico Local (Dados Reais)',
+      executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: [], visualSteps: [],
+      dryRunGuide: false, contentBlocks: localAnalytics.contentBlocks, apiWarning,
+      executionTrace: {
+        iterations: 1, retriedForAlignment: false,
+        steps: localAnalytics.readToolsExecuted.map((t) => ({ toolName: t, phase: 'READ_DATA', status: 'OK', durationMs: 0 })),
+      },
       answeredAt: new Date().toISOString(),
     };
   }
 
-  // 2. RAG Documental do Sistema (Base de conhecimento versionada)
-  const systemKb = await retrieveSystemKnowledge({
-    query: cleanMsg,
-    activeTab: uiState.activeTab,
-    topK: 5,
-    userKeys: {
-      openaiApiKey: user.settings?.openaiApiKey,
-      geminiApiKey: user.settings?.geminiApiKey,
-    },
-  });
-
-  const systemSources = systemKb.chunks.map((c) => ({
-    docId: c.docId,
-    module: c.module,
-    sectionPath: c.sectionPath,
-    score: c.score,
-  }));
-
-  // 3. Seleção de ferramenta (Live Multi-Provedor Tool Calling + fallback determinístico)
-  const provider = (user.settings?.aiProvider || 'OPENAI') as 'OPENAI' | 'GEMINI' | 'CLAUDE';
-  const modelId =
-    provider === 'OPENAI'
-      ? user.settings?.openaiModel || 'gpt-4o-mini'
-      : provider === 'GEMINI'
-      ? user.settings?.geminiModel || 'gemini-2.0-flash'
-      : user.settings?.claudeModel || 'claude-3-5-sonnet-latest';
-  const descriptor = getAiModelDescriptor(modelId);
-  const route = resolveDynamicModelRoute(descriptor.id, {
-    openaiApiKey: user.settings?.openaiApiKey,
-    geminiApiKey: user.settings?.geminiApiKey,
-    claudeApiKey: user.settings?.claudeApiKey,
-  });
-
-  let selectedTool: ProviderToolCallResult | null = null;
-  let llmNarrative = '';
-  let executionMode: 'LIVE_AGENT_TOOLS' | 'DETERMINISTIC_AGENT_LOCAL' = 'DETERMINISTIC_AGENT_LOCAL';
-  let apiWarning: string | null = null;
-
-  const deterministicTool = detectDeterministicToolCall(cleanMsg, uiState);
-
-  if (route.hasExternalApiKey) {
-    try {
-      const kbBlock = systemKb.chunks.map((c) => c.contentText).join('\n\n');
-      const systemInstruction = [
-        'Você é o Agente Autônomo do FinMind. Decida se deve chamar uma ferramenta ou responder analiticamente.',
-        'Regras: 1) Use SOMENTE as ferramentas declaradas. 2) Nunca afirme que uma alteração foi salva antes da confirmação. 3) Para "como fazer" ou "onde fica", use guide_feature_workflow. 4) Para print/captura, use capture_annotated_screen. 5) Para perguntas analíticas puras de saldo/gastos/gráficos, não chame ferramenta.',
-        `Estado atual da UI: aba=${uiState.activeTab}, período=${uiState.selectedMonth}/${uiState.selectedYear}, modal=${uiState.activeModalType || 'nenhum'}, modo=${interactionMode}.`,
-        `<untrusted_system_kb>\n${kbBlock}\n</untrusted_system_kb>`,
-      ].join('\n');
-
-      const liveRes = await callAgentProviderWithTools({
-        provider,
-        apiKey: route.effectiveApiKey,
-        modelId: descriptor.id,
-        systemInstruction,
-        userPrompt: cleanMsg,
-        tools: AGENT_TOOL_DECLARATIONS,
-      });
-      if (liveRes.toolCalls.length > 0) {
-        selectedTool = liveRes.toolCalls[0];
-        llmNarrative = liveRes.text;
-        executionMode = 'LIVE_AGENT_TOOLS';
-      }
-    } catch (err) {
-      apiWarning =
-        err instanceof Error
-          ? `Planejamento externo indisponível (${err.message}); operando com motor determinístico local.`
-          : null;
-    }
-  }
-
-  if (!selectedTool && deterministicTool) {
-    selectedTool = deterministicTool;
-  }
-
-  // 4. Fluxo Analítico Completo (RAG Financeiro + Gráficos Reais)
-  if (!selectedTool) {
-    const analytical = await executeContextualFinancialAssistant({
-      userId,
-      question: cleanMsg,
-      referenceMonth: uiState.selectedMonth,
-      referenceYear: uiState.selectedYear,
-    });
-    return {
-      runId,
-      modality: 'ANALYTICAL',
-      narrative: analytical.directAnswer,
-      providerUsed: analytical.providerUsed,
-      modelUsed: analytical.modelUsed,
-      executionMode:
-        analytical.executionMode === 'LIVE_LLM_RAG'
-          ? 'LIVE_AGENT_TOOLS'
-          : 'DETERMINISTIC_AGENT_LOCAL',
-      systemSources,
-      visualSteps: [],
-      dryRunGuide: false,
-      charts: analytical.charts,
-      historicalFacts: analytical.historicalFacts,
-      calculatedResults: analytical.calculatedResults,
-      projectionsAndEstimates: analytical.projectionsAndEstimates,
-      personalizedRecommendations: analytical.personalizedRecommendations,
-      apiWarning: apiWarning || analytical.apiWarning || null,
-      answeredAt: analytical.answeredAt,
-    };
-  }
-
-  // 5. Despacho da ferramenta selecionada (L0/L1 imediato ou L2/L3 com confirmação)
-  return dispatchSelectedAgentTool({
-    userId,
-    sessionId,
-    runId,
-    selectedTool,
-    interactionMode,
-    llmNarrative,
-    executionMode,
-    providerLabel:
-      executionMode === 'LIVE_AGENT_TOOLS' ? descriptor.providerGroupLabel : 'FINMIND_AGENT_LOCAL',
-    modelLabel:
-      executionMode === 'LIVE_AGENT_TOOLS' ? descriptor.displayName : 'Agente Local + RAG Sistema',
-    systemSources,
-    topSectionPath: systemKb.chunks[0]?.sectionPath,
-    apiWarning,
-  });
+  return {
+    runId, modality: 'ANALYTICAL', narrative: buildNonFinancialFallbackReply(systemKb.chunks),
+    providerUsed: 'FINMIND_AGENT_LOCAL', modelUsed: 'Assistente Local + RAG Sistema',
+    executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: systemSources.filter((s) => s.score >= 0.42),
+    visualSteps: [], dryRunGuide: false, apiWarning, answeredAt: new Date().toISOString(),
+  };
 }

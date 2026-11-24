@@ -16,9 +16,12 @@ export interface ModalProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
 }
 
+const openModalStack: string[] = [];
+
 /**
  * Modal Padronizado segundo DESIGN_SYSTEM.md (Seção 5):
  * - Renderizado via React Portal direto no document.body para nunca ser recortado por containers com backdrop-filter (como o Header)
+ * - Suporta empilhamento seguro: Escape fecha apenas o modal mais ao topo
  * - Desktop: Diálogo amplo centralizado com backdrop-blur e anel sutil de borda
  * - Mobile (< 640px): Drawer / Bottom Sheet ancorado na base da tela com barra puxadora
  */
@@ -33,19 +36,37 @@ export function Modal({
   maxWidth = 'xl',
 }: ModalProps) {
   const effectiveSubtitle = subtitle || description;
+  const modalId = React.useId();
+  const titleId = `${modalId}-title`;
   const [mounted, setMounted] = React.useState(false);
+  const [stackDepth, setStackDepth] = React.useState(0);
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
   React.useEffect(() => {
+    if (!isOpen) return;
+    if (!openModalStack.includes(modalId)) {
+      openModalStack.push(modalId);
+    }
+    setStackDepth(Math.max(0, openModalStack.indexOf(modalId)));
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) onClose();
+      if (e.key === 'Escape' && openModalStack[openModalStack.length - 1] === modalId) {
+        e.preventDefault();
+        onCloseRef.current();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      const idx = openModalStack.indexOf(modalId);
+      if (idx >= 0) openModalStack.splice(idx, 1);
+    };
+  }, [isOpen, modalId]);
 
   if (!isOpen || !mounted) return null;
 
@@ -59,26 +80,25 @@ export function Modal({
 
   const modalNode = (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-md p-0 sm:p-6 animate-in fade-in duration-150"
+      style={{ zIndex: 100 + stackDepth * 2 }}
+      className="fixed inset-0 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-md p-0 sm:p-6 animate-in fade-in duration-150"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-labelledby="modal-title"
+      aria-labelledby={titleId}
     >
       <div
         className={`w-full ${widthMap[maxWidth]} rounded-t-3xl sm:rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-zinc-900 text-slate-900 dark:text-zinc-50 shadow-2xl ring-1 ring-black/5 dark:ring-white/10 overflow-hidden flex flex-col max-h-[90vh]`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Puxador Mobile (Bottom Sheet Thumb Handle) */}
         <div className="flex sm:hidden justify-center pt-3 pb-1 shrink-0">
           <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-zinc-700" />
         </div>
 
-        {/* Header Padronizado */}
         <div className="flex items-start justify-between gap-4 px-6 sm:px-7 py-4 sm:py-5 border-b border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/40 dark:bg-zinc-900/50 shrink-0">
           <div className="space-y-1 min-w-0">
             <h2
-              id="modal-title"
+              id={titleId}
               className="text-lg font-semibold tracking-tight text-slate-900 dark:text-zinc-50"
             >
               {title}
@@ -100,10 +120,8 @@ export function Modal({
           </Button>
         </div>
 
-        {/* Body Padronizado com Scroll Interno */}
-        <div className="px-6 sm:px-7 py-5 overflow-y-auto space-y-4 flex-1">{children}</div>
+        <div data-agent-modal-body="true" className="px-6 sm:px-7 py-5 overflow-y-auto space-y-4 flex-1">{children}</div>
 
-        {/* Footer Padronizado */}
         {footer && (
           <div className="flex items-center justify-end gap-3 px-6 sm:px-7 py-4 border-t border-slate-200/80 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-zinc-950/60 shrink-0">
             {footer}

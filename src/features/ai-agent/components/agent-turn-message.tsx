@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { BookOpen, Camera, Compass, Play, Sparkles } from 'lucide-react';
+import { Activity, BookOpen, Camera, Compass, Play, Sparkles } from 'lucide-react';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import type {
@@ -9,11 +9,13 @@ import type {
   CapturedAnnotatedImage,
 } from '@/features/ai-agent/domain/agent-types';
 import { AssistantDynamicChart } from '@/features/ai-copilot/components/assistant-dynamic-chart';
+import { DynamicContentBlockRenderer } from '@/features/ai-copilot/components/dynamic-content-block-renderer';
 import {
   AgentConfirmationCard,
   type MutationUiState,
 } from '@/features/ai-agent/components/agent-confirmation-card';
 import { AgentScreenshotCard } from '@/features/ai-agent/components/agent-screenshot-card';
+import { SafeMarkdownText } from '@/features/ai-agent/components/safe-markdown-text';
 
 const MODALITY_LABELS: Record<AgentTurnPayload['modality'], string> = {
   ANALYTICAL: 'Análise & Gráficos',
@@ -40,12 +42,18 @@ export function AgentTurnMessage(props: {
     onReplayVisual, onRecaptureScreen,
   } = props;
 
+  const hasVisualContent =
+    (payload.contentBlocks && payload.contentBlocks.length > 0) ||
+    (payload.charts && payload.charts.length > 0);
+
   return (
     <div className="rounded-2xl rounded-tl-sm border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-3.5 space-y-3 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-1.5">
         <Badge variant={payload.modality === 'AUTONOMOUS' ? 'income' : 'transfer'}>
           <Sparkles className="h-3 w-3 shrink-0" />
-          {MODALITY_LABELS[payload.modality]}
+          {payload.modality === 'ANALYTICAL' && !hasVisualContent
+            ? 'Assistente'
+            : MODALITY_LABELS[payload.modality]}
         </Badge>
         <span className="text-[10px] text-slate-400 dark:text-zinc-500 truncate max-w-[180px]">
           {payload.modelUsed}
@@ -58,9 +66,7 @@ export function AgentTurnMessage(props: {
         </div>
       )}
 
-      <p className="text-xs sm:text-[13px] text-slate-800 dark:text-zinc-100 leading-relaxed whitespace-pre-line">
-        {payload.narrative}
-      </p>
+      <SafeMarkdownText content={payload.narrative} />
 
       {capturedImage && <AgentScreenshotCard image={capturedImage} />}
 
@@ -74,13 +80,23 @@ export function AgentTurnMessage(props: {
         />
       )}
 
-      {payload.charts && payload.charts.length > 0 && (
+      {payload.contentBlocks && payload.contentBlocks.length > 0 && (
         <div className="space-y-2.5">
-          {payload.charts.map((chart) => (
-            <AssistantDynamicChart key={chart.id} chart={chart} hideValues={hideValues} />
+          {payload.contentBlocks.map((block) => (
+            <DynamicContentBlockRenderer key={block.id} block={block} hideValues={hideValues} />
           ))}
         </div>
       )}
+
+      {(!payload.contentBlocks || payload.contentBlocks.length === 0) &&
+        payload.charts &&
+        payload.charts.length > 0 && (
+          <div className="space-y-2.5">
+            {payload.charts.map((chart) => (
+              <AssistantDynamicChart key={chart.id} chart={chart} hideValues={hideValues} />
+            ))}
+          </div>
+        )}
 
       {(payload.visualSteps.length > 0 || payload.screenshotDirective) && (
         <div className="flex flex-wrap items-center gap-2 pt-0.5">
@@ -117,6 +133,32 @@ export function AgentTurnMessage(props: {
                 ))}
               </ul>
             )}
+          </div>
+        </details>
+      )}
+
+      {payload.executionTrace && payload.executionTrace.steps.length > 0 && (
+        <details className="rounded-xl border border-slate-200/80 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/60 p-2 text-[11px]">
+          <summary className="cursor-pointer font-medium text-slate-600 dark:text-zinc-400 flex items-center gap-1.5">
+            <Activity className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span>
+              Trilha de execução ({payload.executionTrace.steps.length}{' '}
+              {payload.executionTrace.steps.length === 1 ? 'etapa' : 'etapas'}
+              {payload.executionTrace.retriedForAlignment ? ' • autocorrigido' : ''})
+            </span>
+          </summary>
+          <div className="mt-1.5 space-y-1 pt-1.5 border-t border-slate-200 dark:border-zinc-800 tabular-nums">
+            {payload.executionTrace.steps.map((s, idx) => (
+              <div key={`${s.toolName}-${idx}`} className="flex items-center justify-between gap-2">
+                <span className="truncate text-slate-700 dark:text-zinc-300">
+                  {s.toolName}
+                  {s.note ? ` — ${s.note}` : ''}
+                </span>
+                <span className="text-[10px] text-slate-400 shrink-0">
+                  {s.status} {s.durationMs > 0 ? `(${s.durationMs}ms)` : ''}
+                </span>
+              </div>
+            ))}
           </div>
         </details>
       )}

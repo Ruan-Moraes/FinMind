@@ -11,7 +11,7 @@ function normalizePersonName(name: string): string {
  * Executa a limpeza transacional dos dados financeiros após validar identidade contra `user.name`.
  * - `VALUES_ONLY`: apaga lançamentos, extratos importados, parcelas, faturas e zera saldos das contas,
  *   preservando categorias, metas de carteira, orçamentos, regras fixas, contas e cartões.
- * - `ALL`: apaga todos os dados financeiros e recria as categorias padrão.
+ * - `ALL`: apaga todos os dados financeiros e recria as categorias padrão de forma atômica.
  */
 export async function resetAllFinancialDataForUser(
   user: { id: string; name: string },
@@ -31,6 +31,7 @@ export async function resetAllFinancialDataForUser(
   if (scope === 'VALUES_ONLY') {
     await prisma.$transaction([
       prisma.financialKnowledgeChunk.deleteMany({ where: { userId: user.id } }),
+      prisma.agentActionAuditLog.deleteMany({ where: { userId: user.id } }),
       prisma.attachment.deleteMany({ where: { transaction: { userId: user.id } } }),
       prisma.transaction.deleteMany({ where: { userId: user.id } }),
       prisma.statementImportFile.deleteMany({ where: { batch: { userId: user.id } } }),
@@ -38,7 +39,8 @@ export async function resetAllFinancialDataForUser(
       prisma.installmentGroup.deleteMany({ where: { userId: user.id } }),
       prisma.creditCardInvoice.deleteMany({ where: { creditCard: { userId: user.id } } }),
       prisma.aiAnalysisReport.deleteMany({ where: { userId: user.id } }),
-    prisma.aiChatSession.deleteMany({ where: { userId: user.id } }),
+      prisma.aiChatMessage.deleteMany({ where: { session: { userId: user.id } } }),
+      prisma.aiChatSession.deleteMany({ where: { userId: user.id } }),
       prisma.account.updateMany({
         where: { userId: user.id },
         data: { initialBalanceInCents: 0 },
@@ -50,6 +52,7 @@ export async function resetAllFinancialDataForUser(
 
   await prisma.$transaction([
     prisma.financialKnowledgeChunk.deleteMany({ where: { userId: user.id } }),
+    prisma.agentActionAuditLog.deleteMany({ where: { userId: user.id } }),
     prisma.attachment.deleteMany({ where: { transaction: { userId: user.id } } }),
     prisma.transaction.deleteMany({ where: { userId: user.id } }),
     prisma.statementImportFile.deleteMany({ where: { batch: { userId: user.id } } }),
@@ -65,19 +68,19 @@ export async function resetAllFinancialDataForUser(
     prisma.holiday.deleteMany({ where: { userId: user.id } }),
     prisma.recurrenceRule.deleteMany({ where: { userId: user.id } }),
     prisma.aiAnalysisReport.deleteMany({ where: { userId: user.id } }),
+    prisma.aiChatMessage.deleteMany({ where: { session: { userId: user.id } } }),
     prisma.aiChatSession.deleteMany({ where: { userId: user.id } }),
     prisma.account.deleteMany({ where: { userId: user.id } }),
     prisma.subcategory.deleteMany({ where: { category: { userId: user.id } } }),
     prisma.category.deleteMany({ where: { userId: user.id } }),
-    prisma.userSettings.update({
+    prisma.userSettings.updateMany({
       where: { userId: user.id },
       data: { defaultAccountId: null },
     }),
+    prisma.category.createMany({
+      data: DEFAULT_CATEGORIES.map((c) => ({ userId: user.id, ...c })),
+    }),
   ]);
-
-  await prisma.category.createMany({
-    data: DEFAULT_CATEGORIES.map((c) => ({ userId: user.id, ...c })),
-  });
 
   return { ok: true };
 }

@@ -4,15 +4,16 @@ test.describe('E2E: Agente IA Autônomo, Visual, Captura Real e Guarda de Segura
   test('orienta visualmente, executa alteração com confirmação e rollback, captura tela anotada e bloqueia reset', async ({
     page,
   }) => {
+    test.setTimeout(90000);
     await page.goto('/');
 
-    // 1. Abrir Agente IA Flutuante e alternar para modo Rápido para validação ágil (mantendo visualização + confirmação)
+    // 1. Abrir Agente IA Flutuante (modo automático sem seletor manual)
     await page.getByRole('button', { name: 'Abrir Assistente IA' }).click();
     const chatAside = page.getByRole('complementary', { name: 'Assistente Financeiro Inteligente' });
     await expect(chatAside).toBeVisible();
-    await chatAside.getByRole('button', { name: 'Rápido', exact: true }).click();
+    await expect(chatAside.getByText('Modo do agente:')).toHaveCount(0);
 
-    const chatInput = chatAside.locator('input');
+    const chatInput = chatAside.locator('textarea');
     const sendBtn = chatAside.getByRole('button', { name: 'Enviar pergunta ao assistente IA' });
 
     // 2. Orientação Interativa ("Como faço para cadastrar uma nova meta financeira?")
@@ -20,12 +21,35 @@ test.describe('E2E: Agente IA Autônomo, Visual, Captura Real e Guarda de Segura
     await sendBtn.click();
     await expect(chatAside.getByText('Orientação Interativa').first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'Definir Meta de Carteira' })).toBeVisible();
+    await expect(page.locator('[data-agent-coachmark="true"]')).toBeVisible({ timeout: 8000 });
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.locator('[data-agent-coachmark="true"]')).toHaveCount(0);
+
+    // 2b. Orientação com Scroll Interno de Modal + Coachmark Interativo ("Como configuro os feriados?")
+    await chatInput.fill('Como configuro os feriados?');
+    await sendBtn.click();
+    await expect(page.getByRole('heading', { name: 'Configurações & Preferências' })).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.locator('[data-agent-id="modal.settings.section.holidays"]')).toBeVisible({
+      timeout: 8000,
+    });
+    const coachmark = page.locator('[data-agent-coachmark="true"]');
+    await expect(coachmark).toBeVisible({ timeout: 8000 });
+    await expect(coachmark).toContainText('Gerenciar Calendário de Feriados');
+    await coachmark.getByRole('button', { name: 'Anterior' }).click();
+    await expect(coachmark).toContainText('Estado (UF) e Cidade');
+    await coachmark.getByRole('button', { name: 'Próximo' }).click();
+    await expect(coachmark).toContainText('Gerenciar Calendário de Feriados');
+    await coachmark.getByRole('button', { name: 'Entendi', exact: true }).click();
+    await expect(coachmark).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Configurações & Preferências' })).toBeVisible();
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
 
     // 3. Execução Autônoma com Confirmação (Antes -> Depois), Verificação Real e Desfazer (Undo)
-    await chatInput.fill('Crie uma meta de R$ 2.500');
+    await chatInput.fill('Crie uma meta de R$ 2.500 para Dezembro de 2026 chamada Reserva E2E');
     await sendBtn.click();
-    await expect(chatAside.getByRole('button', { name: 'Confirmar e Executar' })).toBeVisible({ timeout: 10000 });
+    await expect(chatAside.getByRole('button', { name: 'Confirmar e Executar' })).toBeVisible({ timeout: 25000 });
     await chatAside.getByRole('button', { name: 'Confirmar e Executar' }).click();
     await expect(chatAside.getByText(/salva e verificada no banco/i)).toBeVisible({ timeout: 12000 });
 

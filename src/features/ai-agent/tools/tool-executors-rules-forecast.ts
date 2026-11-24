@@ -28,7 +28,16 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
       normalizedParams: parsed,
       postConfirmVisualSteps: [
         { id: 's1', action: 'SWITCH_TAB', tab: 'goals', targetId: 'nav.tab.goals', caption: 'Navegando para Custos & Ganhos Estáticos' },
-        { id: 's2', action: 'HIGHLIGHT', targetId: 'goals.section.staticRules', caption: `Salvando regra "${parsed.description}"`, pauseMs: 320 },
+        {
+          id: 's2',
+          action: 'SCROLL_TO',
+          targetId: 'goals.table.staticRules',
+          caption: `Salvando regra "${parsed.description}"`,
+          tooltipTitle: isIncome ? 'Novo Ganho Estático' : 'Novo Custo Estático',
+          tooltipBody: `Registrando "${parsed.description}" (${formatCentsToBRL(cents)} • ${dayLabel}) na tabela de Regras Fixas Mensais.`,
+          tone: 'emerald',
+          pauseMs: 650,
+        },
       ],
       reversible: true,
     };

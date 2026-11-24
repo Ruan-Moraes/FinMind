@@ -54,6 +54,8 @@ export function CombinedGoalsForecastBanner(props: {
       ? `+${proj.monthsDeltaVsNormal} ${proj.monthsDeltaVsNormal === 1 ? 'mês' : 'meses'} vs ritmo normal`
       : proj.estimatedMonthsToReach !== null && normalEstimatedMonths === null
       ? 'Alcançável com previsões'
+      : proj.estimatedMonthsToReach === null && normalEstimatedMonths === null
+      ? 'Não alcança c/ previsões'
       : 'Mesmo prazo normal';
 
   const deltaVariant =

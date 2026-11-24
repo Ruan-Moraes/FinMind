@@ -16,7 +16,7 @@ import type { ActiveTab } from '@/features/dashboard/types/workbench-types';
 
 export function WorkbenchHeader() {
   const { props, wb } = useWorkbench();
-  const { ssoState, activeHeaderModelId, selectedMonth, selectedYear } = props;
+  const { selectedMonth, selectedYear } = props;
   const { activeTab, setActiveTab, hideValues, theme, setIsSettingsModalOpen, updatePeriodParams, handleToggleTheme, handleTogglePrivacy, handleOpenCreateTxModal } = wb;
   return (
       <header className="sticky top-0 z-30 border-b border-slate-200 dark:border-zinc-800/80 bg-white/85 dark:bg-zinc-950/85 backdrop-blur-md">
@@ -93,11 +93,9 @@ export function WorkbenchHeader() {
 
           {/* Coluna Direita: Seletor de Modelos IA (SSO + Sanity Check) & Ações Rápidas */}
           <div className="flex items-center justify-end gap-2 shrink-0 xl:flex-1">
-            <HeaderModelSelector
-              initialModelId={activeHeaderModelId}
-              initialSsoAuthenticated={ssoState.authenticated}
-              initialSsoSession={ssoState.session}
-            />
+            <div data-agent-id="header.model.selector">
+              <HeaderModelSelector />
+            </div>
 
             <Button
               variant="secondary"

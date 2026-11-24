@@ -1,4 +1,3 @@
-import { getAiModelDescriptor, maskApiKey } from '@/features/ai-copilot/models';
 import { logWarn } from '@/shared/lib/logger';
 import { prisma } from '@/shared/lib/prisma';
 import { getAccountsWithBalances, getCreditCardsWithSummary, getPortfolioGoalsProgress, getMonthSummary, getStaticBaselineSummary, getMoMComparison, getSixMonthsHistory, getMonthDateRange } from '@/features/analytics';
@@ -7,10 +6,9 @@ import {
   parseSkippedMonths,
 } from '@/features/planning/domain/recurrence-month-skip';
 import { type ensurePersonalUserInitialized } from '@/features/auth';
-import { type SsoSessionPayload } from '@/features/auth/sso';
+import { buildAuthoritativeGlobalAiState } from '@/features/ai-copilot/services/ai-provider-state-service';
 export async function loadSerializedDashboardData(params: {
   user: Awaited<ReturnType<typeof ensurePersonalUserInitialized>>;
-  ssoState: { authenticated: boolean; session: SsoSessionPayload | null };
   resolvedParams: { month?: string;
     year?: string;
     compMonthA?: string;
@@ -18,33 +16,28 @@ export async function loadSerializedDashboardData(params: {
     compMonthB?: string;
     compYearB?: string;
   };
-}) { const { user, ssoState, resolvedParams } = params;
-  const activeProvider = (user.settings?.aiProvider as 'OPENAI' | 'GEMINI' | 'CLAUDE') || 'OPENAI';
-  const rawModelCandidate =
-    activeProvider === 'OPENAI'
-      ? user.settings?.openaiModel || 'gpt-4o-mini'
-      : activeProvider === 'GEMINI'
-      ? user.settings?.geminiModel || 'gemini-2.0-flash'
-      : user.settings?.claudeModel || 'claude-3-5-sonnet-latest';
-  const activeHeaderModelId = getAiModelDescriptor(rawModelCandidate).id;
+}) { const { user, resolvedParams } = params;
+  const initialAiState = await buildAuthoritativeGlobalAiState(user.id, { validateLive: false });
   const fiscalMonthStartDay = user.settings?.fiscalMonthStartDay ?? 1;
   const now = new Date();
   const defaultMonth = now.getMonth() + 1;
   const defaultYear = now.getFullYear();
-  const selectedMonth = Math.min(
-    12, Math.max(1, Number(resolvedParams.month) || defaultMonth)
-  );
-  const selectedYear = Number(resolvedParams.year) || defaultYear;
+  const parseMonth = (raw: string | undefined, fallback: number) => {
+    const n = Math.trunc(Number(raw));
+    return Number.isFinite(n) && n >= 1 && n <= 12 ? n : fallback;
+  };
+  const parseYear = (raw: string | undefined, fallback: number) => {
+    const n = Math.trunc(Number(raw));
+    return Number.isFinite(n) && n >= 2000 && n <= 2100 ? n : fallback;
+  };
+  const selectedMonth = parseMonth(resolvedParams.month, defaultMonth);
+  const selectedYear = parseYear(resolvedParams.year, defaultYear);
   const defaultPrevMonth = selectedMonth === 1 ? 12 : selectedMonth - 1;
   const defaultPrevYear = selectedMonth === 1 ? selectedYear - 1 : selectedYear;
-  const compareMonthA = Math.min(
-    12, Math.max(1, Number(resolvedParams.compMonthA) || defaultPrevMonth)
-  );
-  const compareYearA = Number(resolvedParams.compYearA) || defaultPrevYear;
-  const compareMonthB = Math.min(
-    12, Math.max(1, Number(resolvedParams.compMonthB) || selectedMonth)
-  );
-  const compareYearB = Number(resolvedParams.compYearB) || selectedYear;
+  const compareMonthA = parseMonth(resolvedParams.compMonthA, defaultPrevMonth);
+  const compareYearA = parseYear(resolvedParams.compYearA, defaultPrevYear);
+  const compareMonthB = parseMonth(resolvedParams.compMonthB, selectedMonth);
+  const compareYearB = parseYear(resolvedParams.compYearB, selectedYear);
   const { start, end } = getMonthDateRange(selectedMonth, selectedYear, fiscalMonthStartDay);
   const [
     accounts, creditCards,
@@ -67,7 +60,7 @@ export async function loadSerializedDashboardData(params: {
       include: { category: true },
     }),
     prisma.recurrenceRule.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, isActive: true },
       include: { category: true, account: true },
       orderBy: { dayOfMonth: 'asc' },
     }),
@@ -152,6 +145,7 @@ export async function loadSerializedDashboardData(params: {
     creditCardName: tx.creditCard?.name || null, categoryId: tx.categoryId,
     categoryName: tx.category?.name || null, categoryColor: tx.category?.color || null,
     categoryIcon: tx.category?.icon || null, installmentGroupId: tx.installmentGroupId,
+    recurrenceRuleId: tx.recurrenceRuleId,
     installmentNumber: tx.installmentNumber, totalInstallments: tx.totalInstallments,
     importBatchId: tx.importBatchId, rawBankDescription: tx.rawBankDescription,
     financialAction: tx.financialAction, counterparty: tx.counterparty,
@@ -202,18 +196,8 @@ export async function loadSerializedDashboardData(params: {
           fiscalMonthStartDay: user.settings?.fiscalMonthStartDay ?? 1,
           defaultAccountId: user.settings?.defaultAccountId ?? null,
           holidayState: user.settings?.holidayState ?? null,
-          holidayCity: user.settings?.holidayCity ?? null,
-          aiProvider: (user.settings?.aiProvider as 'OPENAI' | 'GEMINI' | 'CLAUDE') || 'OPENAI',
-          aiConnectionMode:
-            (user.settings?.aiConnectionMode as 'SUBSCRIPTION' | 'API_QUOTA') || 'SUBSCRIPTION',
-          openaiApiKey: maskApiKey(user.settings?.openaiApiKey),
-          geminiApiKey: maskApiKey(user.settings?.geminiApiKey),
-          claudeApiKey: maskApiKey(user.settings?.claudeApiKey),
-          openaiModel: getAiModelDescriptor(user.settings?.openaiModel || 'gpt-4o-mini').id,
-          geminiModel: getAiModelDescriptor(user.settings?.geminiModel || 'gemini-2.0-flash').id,
-          claudeModel: getAiModelDescriptor(user.settings?.claudeModel || 'claude-3-5-sonnet-latest').id, },
-    ssoState: { authenticated: ssoState.authenticated, session: ssoState.session },
-    activeHeaderModelId, aiReports,
+          holidayCity: user.settings?.holidayCity ?? null, },
+    initialAiState, aiReports,
     selectedMonth, selectedYear,
     compareMonthA, compareYearA,
     compareMonthB, compareYearB,

@@ -58,6 +58,8 @@ export interface ExistingRuleCandidate {
   type: 'INCOME' | 'EXPENSE';
   nature: 'STATIC' | 'VARIABLE';
   amountInCents: number;
+  skippedMonths?: string | string[] | null;
+  monthlyOverrides?: string | Record<string, number> | null;
   dayOfMonth: number;
   frequency: string;
   categoryId: string | null;

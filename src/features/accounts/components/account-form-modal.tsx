@@ -41,7 +41,7 @@ export function AccountFormModal() {
             <Button variant="secondary" onClick={wb.closeModal}>
               Cancelar
             </Button>
-            <Button variant="primary" type="submit" form="form-account" isLoading={isSubmitting}>
+            <Button data-agent-id="modal.account.btn.submit" variant="primary" type="submit" form="form-account" isLoading={isSubmitting}>
               {editingAccountId ? 'Salvar Alterações da Conta' : 'Criar Conta'}
             </Button>
           </>
@@ -50,6 +50,7 @@ export function AccountFormModal() {
         <form id="form-account" onSubmit={handleSaveAccount} className="space-y-4">
           <FormField label="Nome da Conta">
             <Input
+              data-agent-id="modal.account.input.name"
               placeholder="Ex: Itaú, Nubank, Carteira Física..."
               value={accName}
               onChange={(e) => setAccName(e.target.value)}
@@ -58,7 +59,7 @@ export function AccountFormModal() {
           </FormField>
 
           {/* Seletor Visual de Tipo de Conta com Ícones */}
-          <div className="space-y-1.5">
+          <div data-agent-id="modal.account.section.type" className="space-y-1.5">
             <label className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 block">
               Tipo de Conta / Carteira
             </label>
@@ -185,6 +186,7 @@ export function AccountFormModal() {
           ) : (
             <FormField label="Saldo Inicial (R$)">
               <Input
+                data-agent-id="modal.account.input.initialBalance"
                 tabular
                 prefixText="R$"
                 value={accInitial}

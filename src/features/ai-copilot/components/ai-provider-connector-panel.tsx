@@ -1,241 +1,238 @@
 'use client';
 
 import * as React from 'react';
-import { Sparkles, Check, Zap, KeyRound, ExternalLink, RefreshCw } from 'lucide-react';
-import { Button } from '@/shared/ui/button';
-import { FormField, Input, Select } from '@/shared/ui/input';
-import { Badge } from '@/shared/ui/badge';
+import { AlertTriangle, Check, ExternalLink, KeyRound, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import {
-  AI_PROVIDER_META,
+  AI_PROVIDER_IDS,
+  PROVIDER_STATIC_META,
+  PROVIDER_STATUS_LABELS,
   type AiProviderId,
-  type AiConnectionMode,
-} from '@/features/ai-copilot/providers';
-import { updateAiSettingsAction } from '@/features/ai-copilot/actions/ai-governance.actions';
-import {
-  PROVIDER_CONNECTOR_UI,
-  useLiveProviderModels,
-} from '@/features/ai-copilot/hooks/use-live-provider-models';
+} from '@/features/ai-copilot/domain/ai-provider-types';
+import { useAiProviders } from '@/features/ai-copilot/context/ai-providers-context';
+import { AiModelSelector } from '@/features/ai-copilot/components/ai-model-selector';
+import { AiDiagnosticErrorCard } from '@/features/ai-copilot/components/ai-diagnostic-error-card';
+import { Button } from '@/shared/ui/button';
+import { FormField, Input } from '@/shared/ui/input';
+import { Badge } from '@/shared/ui/badge';
 
-export function AiProviderConnectorPanel(props: {
-  provider: AiProviderId; setProvider: (p: AiProviderId) => void;
-  connectionMode: AiConnectionMode; setConnectionMode: (m: AiConnectionMode) => void;
-  openaiKey: string; setOpenaiKey: (k: string) => void;
-  geminiKey: string; setGeminiKey: (k: string) => void;
-  claudeKey: string; setClaudeKey: (k: string) => void;
-  openaiModel: string; setOpenaiModel: (m: string) => void;
-  geminiModel: string; setGeminiModel: (m: string) => void;
-  claudeModel: string; setClaudeModel: (m: string) => void;
-  configSavedBanner: boolean; isSavingConfig: boolean; handleSaveAiConfig: () => void;
-}) {
+export function AiProviderConnectorPanel() {
   const {
-    provider, setProvider, connectionMode, setConnectionMode,
-    openaiKey, setOpenaiKey, geminiKey, setGeminiKey, claudeKey, setClaudeKey,
-    openaiModel, setOpenaiModel, geminiModel, setGeminiModel, claudeModel, setClaudeModel,
-    configSavedBanner, isSavingConfig, handleSaveAiConfig,
-  } = props;
+    state, saveProviderKey, removeProviderKey, selectModel, refreshProviderModels,
+  } = useAiProviders();
 
-  const activeModel =
-    provider === 'OPENAI' ? openaiModel : provider === 'GEMINI' ? geminiModel : claudeModel;
-  const activeKey =
-    provider === 'OPENAI' ? openaiKey : provider === 'GEMINI' ? geminiKey : claudeKey;
-  const setActiveKey =
-    provider === 'OPENAI' ? setOpenaiKey : provider === 'GEMINI' ? setGeminiKey : setClaudeKey;
+  const [selectedTab, setSelectedTab] = React.useState<AiProviderId>(state.activeProvider);
+  const [keyInput, setKeyInput] = React.useState('');
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [isRemoving, setIsRemoving] = React.useState(false);
+  const [savedBanner, setSavedBanner] = React.useState(false);
+  const [actionError, setActionError] = React.useState<string | null>(null);
+  const bannerTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { models, source, isLoading: isRefreshingModels, refresh } = useLiveProviderModels(
-    provider,
-    activeModel
-  );
-  const ui = PROVIDER_CONNECTOR_UI[provider];
+  React.useEffect(() => () => {
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+  }, []);
 
-  const handleModelChange = async (next: string) => {
-    const nextOpenai = provider === 'OPENAI' ? next : openaiModel;
-    const nextGemini = provider === 'GEMINI' ? next : geminiModel;
-    const nextClaude = provider === 'CLAUDE' ? next : claudeModel;
-    if (provider === 'OPENAI') setOpenaiModel(next);
-    if (provider === 'GEMINI') setGeminiModel(next);
-    if (provider === 'CLAUDE') setClaudeModel(next);
+  const pState = state.providers[selectedTab];
+  const meta = PROVIDER_STATIC_META[selectedTab];
+  const statusInfo = PROVIDER_STATUS_LABELS[pState.status];
+  const selectedModelMeta = pState.models.find((m) => m.id === pState.selectedModelId);
 
-    await updateAiSettingsAction({
-      aiProvider: provider,
-      aiConnectionMode: connectionMode,
-      openaiApiKey: openaiKey,
-      geminiApiKey: geminiKey,
-      claudeApiKey: claudeKey,
-      openaiModel: nextOpenai,
-      geminiModel: nextGemini,
-      claudeModel: nextClaude,
-    });
+  const handleSaveKey = async () => {
+    if (!keyInput.trim()) return;
+    setIsSaving(true);
+    setActionError(null);
+    setSavedBanner(false);
+    try {
+      const res = await saveProviderKey(selectedTab, keyInput, { activateProvider: true });
+      if (!res.ok) {
+        setActionError(res.error || 'Falha ao validar a chave de API.');
+      } else {
+        setKeyInput('');
+        setSavedBanner(true);
+        if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current);
+        bannerTimerRef.current = setTimeout(() => setSavedBanner(false), 3500);
+      }
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const openSsoPopup = () => {
-    const w = 480;
-    const h = 680;
-    const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
-    const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));
-    window.open(
-      `/sso-popup?provider=${provider}&modelId=${encodeURIComponent(activeModel)}`,
-      `FinMind_SSO_${provider}`,
-      `width=${w},height=${h},left=${left},top=${top}`
-    );
+  const handleRemoveKey = async () => {
+    setIsRemoving(true);
+    setActionError(null);
+    try {
+      const res = await removeProviderKey(selectedTab);
+      if (!res.ok) setActionError(res.error || 'Não foi possível remover a chave.');
+    } finally {
+      setIsRemoving(false);
+    }
   };
 
   return (
-    <div data-agent-id="ai.panel.providers" data-agent-sensitive="true" className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/70 p-6 space-y-5">
+    <div
+      data-agent-id="ai.panel.providers"
+      data-agent-sensitive="true"
+      className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/70 p-6 space-y-5"
+    >
       <div className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-indigo-500 shrink-0" />
             <h2 className="text-lg font-semibold">
-              Central de Inteligência Artificial (ChatGPT, Gemini & Claude)
+              Provedores de Inteligência Artificial (Chave de API)
             </h2>
           </div>
           <p className="text-sm text-slate-500 dark:text-zinc-400 mt-0.5">
-            Utilize seu <strong>Plano de Assinatura</strong> nos 3 provedores ou conecte via{' '}
-            <strong>Chave de Acesso</strong>. Suas preferências ficam salvas automaticamente.
+            Configure suas chaves oficiais da OpenAI, Google Gemini e Anthropic Claude. O estado e os modelos ficam sincronizados em tempo real com toda a aplicação.
           </p>
         </div>
-        <div className="flex items-center justify-end gap-2.5 shrink-0 md:ml-auto">
-          {configSavedBanner && (
+        <div className="flex items-center gap-2 shrink-0">
+          {savedBanner && (
             <Badge variant="income">
-              <Check className="h-3.5 w-3.5" /> Salvo
+              <Check className="h-3.5 w-3.5" /> Validado e Sincronizado
             </Badge>
           )}
-          <Button variant="primary" size="md" onClick={handleSaveAiConfig} isLoading={isSavingConfig}>
-            Salvar Conexão
-          </Button>
+          <a
+            href={meta.consoleUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            {meta.consoleLabel}
+          </a>
         </div>
       </div>
 
+      {/* Cards independentes dos 3 provedores */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {(['OPENAI', 'GEMINI', 'CLAUDE'] as AiProviderId[]).map((id) => {
-          const meta = AI_PROVIDER_META[id];
-          const isSelected = provider === id;
+        {AI_PROVIDER_IDS.map((id) => {
+          const cardMeta = PROVIDER_STATIC_META[id];
+          const cardState = state.providers[id];
+          const cardStatus = PROVIDER_STATUS_LABELS[cardState.status];
+          const isSelected = selectedTab === id;
+          const isActiveGlobal = state.activeProvider === id;
           return (
             <button
               key={id}
               type="button"
-              onClick={() => setProvider(id)}
+              onClick={() => { setSelectedTab(id); setKeyInput(''); setActionError(null); }}
               className={`rounded-2xl border p-4 text-left transition-all ${
                 isSelected
                   ? 'border-indigo-500 bg-white dark:bg-zinc-950 shadow-md ring-1 ring-indigo-500'
                   : 'border-slate-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/50 hover:border-slate-300 dark:hover:border-zinc-700'
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-sm flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: meta.badgeColor }} />
-                  {meta.name}
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cardMeta.badgeColor }} />
+                  {cardMeta.name}
                 </span>
-                {isSelected && <Badge variant="transfer">Ativo</Badge>}
+                <Badge variant={cardStatus.tone === 'emerald' ? 'income' : cardStatus.tone === 'rose' ? 'expense' : 'transfer'}>
+                  {cardStatus.label}
+                </Badge>
               </div>
-              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5">
-                Assinatura: <strong>{meta.subscriptionName}</strong>
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1.5 truncate">
+                {cardState.models.length > 0 ? `${cardState.models.length} modelos oficiais` : cardState.keyPreview ? `Chave ${cardState.keyPreview}` : 'Nenhuma chave configurada'}
+                {isActiveGlobal ? ' • Ativo' : ''}
               </p>
             </button>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-        <button
-          type="button"
-          onClick={() => setConnectionMode('SUBSCRIPTION')}
-          className={`rounded-xl border p-4 text-left transition-all ${
-            connectionMode === 'SUBSCRIPTION'
-              ? 'border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10'
-              : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold flex items-center gap-2">
-              <Zap className="h-4 w-4 text-emerald-500" />
-              Modo 1: Usar Meu Plano de Assinatura (Custo Zero)
-            </span>
-            {connectionMode === 'SUBSCRIPTION' && <Badge variant="income">Selecionado</Badge>}
-          </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-            Use sua assinatura do <strong>ChatGPT Plus</strong>, <strong>Gemini Advanced</strong> ou{' '}
-            <strong>Claude Pro</strong> sem precisar de chave paga.
-          </p>
-        </button>
-        <button
-          type="button"
-          onClick={() => setConnectionMode('API_QUOTA')}
-          className={`rounded-xl border p-4 text-left transition-all ${
-            connectionMode === 'API_QUOTA'
-              ? 'border-indigo-500 bg-indigo-500/5 dark:bg-indigo-500/10'
-              : 'border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-indigo-500" />
-              Modo 2: Conexão via Chave de Acesso
-            </span>
-            {connectionMode === 'API_QUOTA' && <Badge variant="transfer">Selecionado</Badge>}
-          </div>
-          <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-            Executa diretamente usando sua chave da OpenAI Platform, Google AI Studio (com cota gratuita) ou Anthropic Console.
-          </p>
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+      {/* Configuração de Chave API + Seletor Padronizado de Modelos */}
+      <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-end">
         <FormField
-          label={ui.modelLabel}
+          label={meta.keyLabel}
           hint={
-            source === 'LIVE_API'
-              ? `${models.length} modelos liberados pela ${ui.company}`
-              : `Conecte sua chave para listar todos os modelos da ${ui.company}`
+            pState.hasStoredKey
+              ? `Chave salva com criptografia: ${pState.keyPreview} (${statusInfo.label})`
+              : pState.hasEnvKey
+              ? `Usando variável de ambiente (${meta.envVarName})`
+              : `Cole sua chave oficial (${meta.keyPlaceholder}) para validar e listar modelos`
+          }
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              placeholder={pState.hasStoredKey ? 'Cole uma nova chave para substituir...' : meta.keyPlaceholder}
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              className="flex-1"
+            />
+            <Button type="button" variant="primary" size="md" disabled={!keyInput.trim()} isLoading={isSaving} onClick={() => void handleSaveKey()}>
+              <KeyRound className="h-4 w-4" />
+              Validar
+            </Button>
+            {pState.hasStoredKey && (
+              <Button type="button" variant="destructive" size="md" isLoading={isRemoving} title={`Remover chave ${meta.shortName}`} aria-label={`Remover chave ${meta.shortName}`} onClick={() => void handleRemoveKey()}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </FormField>
+
+        <FormField
+          label={`Modelo ${meta.name}`}
+          hint={
+            pState.modelsLoading
+              ? `Consultando endpoint oficial da ${meta.company}...`
+              : pState.models.length > 0
+              ? `${pState.models.length} modelos retornados pela API oficial da ${meta.company}`
+              : `Cadastre uma chave válida para carregar modelos oficiais da ${meta.company}`
           }
         >
           <div className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
-              <Select value={activeModel} onChange={(e) => void handleModelChange(e.target.value)}>
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.displayName} ({m.id})
-                  </option>
-                ))}
-              </Select>
+              <AiModelSelector
+                mode="provider"
+                activeProvider={selectedTab}
+                activeModelId={pState.selectedModelId}
+                providers={state.providers}
+                onSelect={(prov, modelId) => void selectModel(prov, modelId)}
+                ariaLabel={`Selecionar modelo ${meta.name}`}
+              />
             </div>
             <button
               type="button"
-              onClick={() => void refresh()}
-              disabled={isRefreshingModels}
-              title={`Atualizar lista de modelos direto da ${ui.company}`}
-              className="h-11 px-4 shrink-0 inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-xs font-semibold transition-all shadow-sm disabled:opacity-60 cursor-pointer"
+              onClick={() => void refreshProviderModels(selectedTab, true)}
+              disabled={pState.modelsLoading || pState.status === 'NOT_CONFIGURED'}
+              title={`Atualizar lista de modelos direto da ${meta.company}`}
+              className="h-11 px-4 shrink-0 inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 text-xs font-semibold transition-all shadow-sm disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${isRefreshingModels ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 shrink-0 ${pState.modelsLoading ? 'animate-spin' : ''}`} />
               <span>Atualizar</span>
             </button>
           </div>
         </FormField>
-
-        {connectionMode === 'API_QUOTA' ? (
-          <FormField
-            label={ui.keyLabel}
-            hint="Se mascarada, mantém a chave já salva com segurança"
-          >
-            <Input
-              type="password"
-              placeholder={ui.placeholder}
-              value={activeKey}
-              onChange={(e) => setActiveKey(e.target.value)}
-            />
-          </FormField>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-slate-600 dark:text-zinc-400">
-              {ui.ssoLabel}
-            </span>
-            <Button variant="primary" size="md" className="w-full h-11" onClick={openSsoPopup}>
-              <ExternalLink className="h-4 w-4" />
-              {ui.ssoButton}
-            </Button>
-          </div>
-        )}
       </div>
+
+      {selectedModelMeta && !selectedModelMeta.compatibleWithApp && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            <strong>Modelo incompatível com chat/agente:</strong> {selectedModelMeta.incompatibilityReason}
+          </span>
+        </div>
+      )}
+
+      {pState.selectedModelId && pState.models.length > 0 && !pState.selectedModelAvailable && (
+        <div className="rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-200 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            O modelo salvo (<code>{pState.selectedModelId}</code>) não foi encontrado na lista atual da {meta.company}. Escolha um modelo disponível acima (nenhuma substituição automática foi feita).
+          </span>
+        </div>
+      )}
+
+      {(actionError || pState.error) && (
+        <AiDiagnosticErrorCard
+          diagnosticCode={pState.error?.code}
+          rawError={actionError || pState.error?.message || ''}
+          providerName={meta.shortName}
+        />
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarCheck2, Plus } from 'lucide-react';
+import { CalendarCheck2, Plus, Sparkles } from 'lucide-react';
 import { useWorkbench } from '@/features/dashboard/context/workbench-context';
 import { formatCentsToBRL } from '@/shared/lib/currency';
 import { Button } from '@/shared/ui/button';
@@ -75,93 +75,113 @@ export function ValueForecastTargetsSection({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-5">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
-          <CalendarCheck2 className="h-5 w-5 text-indigo-500 shrink-0" />
-          Metas de Saldo por Data (Verificação no Dia)
-        </h2>
-        <p className="text-sm text-slate-500 dark:text-zinc-400">
-          Defina o saldo que você planeja alcançar em um dia específico. Quando bater a data, verificamos automaticamente se o seu saldo real ficou igual, maior ou menor do que o planejado.
-        </p>
+    <section className="rounded-2xl border border-slate-200/90 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/60 p-5 sm:p-6 space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div className="flex items-start gap-3.5">
+          <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+            <CalendarCheck2 className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-zinc-100">
+                Metas de Saldo por Data
+              </h2>
+              <span className="inline-flex items-center rounded-full bg-indigo-500/10 px-2.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-300">
+                Verificação no dia
+              </span>
+              {evaluatedTargets.length > 0 && (
+                <span className="inline-flex items-center rounded-full bg-slate-200/70 dark:bg-zinc-800 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:text-zinc-300 tabular-nums">
+                  {evaluatedTargets.length} {evaluatedTargets.length === 1 ? 'meta' : 'metas'}
+                </span>
+              )}
+            </div>
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 max-w-3xl">
+              Defina o saldo que você planeja alcançar em um dia específico. Na data escolhida, comparamos automaticamente com o seu saldo real.
+            </p>
+          </div>
+        </div>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 space-y-3"
+        className="rounded-2xl border border-slate-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 sm:p-5 shadow-sm space-y-4"
       >
         {error && (
-          <div className="rounded-lg border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/60 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
+          <div className="rounded-xl border border-rose-300 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/60 px-3.5 py-2.5 text-xs font-medium text-rose-700 dark:text-rose-300">
             {error}
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="space-y-1">
-            <label htmlFor="target-title" className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <label htmlFor="target-title" className="h-5 flex items-center text-xs font-medium text-slate-700 dark:text-zinc-300 truncate">
               Nome da meta
             </label>
-            <Input
-              id="target-title"
-              placeholder="Ex: Saldo após freela"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-            />
+            <Input id="target-title" placeholder="Ex: Saldo após freela" value={title} onChange={(e) => setTitle(e.target.value)} required />
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-1">
-              <label htmlFor="target-amount" className="text-xs font-medium text-slate-600 dark:text-zinc-300">
-                Saldo planejado (R$)
+
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center justify-between gap-2 h-5">
+              <label htmlFor="target-amount" className="text-xs font-medium text-slate-700 dark:text-zinc-300 truncate">
+                Saldo planejado
               </label>
               {projectedFinalBalanceInCents > 0 && (
                 <button
                   type="button"
-                  onClick={() =>
-                    setPlannedBalanceRaw(
-                      (projectedFinalBalanceInCents / 100).toFixed(2).replace('.', ',')
-                    )
-                  }
-                  className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 hover:underline"
+                  onClick={() => setPlannedBalanceRaw((projectedFinalBalanceInCents / 100).toFixed(2).replace('.', ','))}
+                  className="inline-flex items-center gap-1 rounded-md bg-indigo-50 dark:bg-indigo-500/15 px-1.5 py-0.5 text-[11px] font-medium text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-500/25 transition-colors shrink-0"
+                  title={`Preencher com saldo projetado (${formatCentsToBRL(projectedFinalBalanceInCents, hideValues)})`}
                 >
-                  Usar projetado
+                  <Sparkles className="h-3 w-3" />
+                  <span>Usar projetado</span>
                 </button>
               )}
             </div>
-            <Input
-              id="target-amount"
-              inputMode="decimal"
-              placeholder="Ex: 5.000,00"
-              value={plannedBalanceRaw}
-              onChange={(e) => setPlannedBalanceRaw(e.target.value)}
-              required
-            />
+            <Input id="target-amount" inputMode="decimal" prefixText="R$" tabular placeholder="5.000,00" value={plannedBalanceRaw} onChange={(e) => setPlannedBalanceRaw(e.target.value)} required />
           </div>
-          <div className="space-y-1">
-            <label htmlFor="target-date" className="text-xs font-medium text-slate-600 dark:text-zinc-300">
+
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <label htmlFor="target-date" className="h-5 flex items-center text-xs font-medium text-slate-700 dark:text-zinc-300 truncate">
               Dia da meta
             </label>
-            <Input
-              id="target-date"
-              type="date"
-              value={targetDate}
-              onChange={(e) => setTargetDate(e.target.value)}
-              required
-            />
+            <Input id="target-date" type="date" tabular value={targetDate} onChange={(e) => setTargetDate(e.target.value)} required />
           </div>
-          <div className="space-y-1">
-            <label htmlFor="target-notes" className="text-xs font-medium text-slate-600 dark:text-zinc-300">
-              Observação (opcional)
-            </label>
-            <Input
-              id="target-notes"
-              placeholder="Ex: Com 13º e freela"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center justify-between gap-2 h-5">
+              <label htmlFor="target-notes" className="text-xs font-medium text-slate-700 dark:text-zinc-300 truncate">
+                Observação
+              </label>
+              <span className="text-[11px] text-slate-400 dark:text-zinc-500 shrink-0">Opcional</span>
+            </div>
+            <Input id="target-notes" placeholder="Ex: Com 13º e freela" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
         </div>
-        <div className="flex justify-end">
-          <Button type="submit" variant="primary" size="sm" isLoading={isSaving}>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3.5 border-t border-slate-100 dark:border-zinc-800/80">
+          <p className="text-xs text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+            {projectedFinalBalanceInCents > 0 ? (
+              <>
+                <Sparkles className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                <span>
+                  Saldo projetado atual:{' '}
+                  <strong className="font-semibold text-slate-700 dark:text-zinc-200 tabular-nums">
+                    {formatCentsToBRL(projectedFinalBalanceInCents, hideValues)}
+                  </strong>
+                </span>
+              </>
+            ) : (
+              <span>A verificação acontece automaticamente quando chegar a data escolhida.</span>
+            )}
+          </p>
+          <Button
+            data-agent-id="forecast.btn.addTarget"
+            type="submit"
+            variant="primary"
+            size="sm"
+            isLoading={isSaving}
+            className="w-full sm:w-auto shrink-0"
+          >
             <Plus className="h-4 w-4" />
             <span>Adicionar Meta de Data</span>
           </Button>
@@ -169,8 +189,16 @@ export function ValueForecastTargetsSection({
       </form>
 
       {evaluatedTargets.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 dark:border-zinc-800 p-6 text-center text-xs text-slate-500 dark:text-zinc-400">
-          Nenhuma meta de saldo por data cadastrada ainda. Crie uma acima para acompanhar se seu saldo bateu o planejado no dia escolhido.
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/40 px-6 py-8 flex flex-col items-center justify-center text-center gap-2">
+          <div className="h-10 w-10 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center">
+            <CalendarCheck2 className="h-5 w-5" />
+          </div>
+          <p className="text-sm font-medium text-slate-700 dark:text-zinc-200">
+            Nenhuma meta de saldo por data cadastrada
+          </p>
+          <p className="text-xs text-slate-500 dark:text-zinc-400 max-w-md">
+            Crie uma meta acima para acompanhar automaticamente se o seu saldo atingiu o valor planejado no dia escolhido.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -184,6 +212,6 @@ export function ValueForecastTargetsSection({
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

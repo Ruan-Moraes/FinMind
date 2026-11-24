@@ -31,7 +31,7 @@ export function CreditCardsSection() {
                   </p>
                 </div>
                 <div className="flex items-center justify-end shrink-0 sm:ml-auto">
-                  <Button variant="secondary" size="md" onClick={handleOpenCreateCardModal}>
+                  <Button data-agent-id="accounts.btn.createCard" variant="secondary" size="md" onClick={handleOpenCreateCardModal}>
                     <Plus className="h-4 w-4" />
                     Novo Cartão
                   </Button>

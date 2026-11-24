@@ -42,11 +42,11 @@ export function HolidaysSettingsCard({
     : 'Apenas feriados nacionais';
 
   return (
-    <div className="rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-slate-50/50 dark:bg-zinc-950/70 p-5 space-y-4">
+    <div data-agent-id="modal.settings.section.holidays" className="rounded-2xl border border-slate-200/90 dark:border-zinc-800/90 bg-slate-50/50 dark:bg-zinc-950/70 p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3.5">
         <div className="flex items-start gap-3 min-w-0">
           <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
-            <MapPin className="h-4.5 w-4.5" />
+            <MapPin className="h-4 w-4" />
           </div>
           <div className="space-y-1 min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-zinc-100 leading-snug">

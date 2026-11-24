@@ -1,9 +1,9 @@
 ---
 docId: value-forecast
 module: forecast
-version: 1.0.0
+version: 1.1.0
 screens: ["forecast"]
-relatedTools: ["navigate_to_section", "upsert_value_forecast", "delete_value_forecast", "upsert_balance_target", "guide_feature_workflow"]
+relatedTools: ["navigate_to_section", "query_forecasts_and_simulations", "upsert_value_forecast", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["previsao", "previsao de valor", "vou ganhar", "provavel gasto", "meta de saldo", "projecao", "futuro"]
 ---
 

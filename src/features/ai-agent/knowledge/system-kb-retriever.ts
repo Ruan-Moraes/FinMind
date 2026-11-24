@@ -4,7 +4,6 @@ import {
   cosineSimilarity,
   sanitizeRetrievedContentAgainstPromptInjection,
 } from '@/features/ai-copilot/rag/rag-math-and-security';
-import { generateEmbeddingsBatch } from '@/features/ai-copilot/rag/embedding-gateway';
 import {
   loadKnowledgeDocumentsFromDisk,
   syncSystemKnowledgeBase,
@@ -46,17 +45,18 @@ function safeParseStringArray(json: string): string[] {
   }
 }
 
+let lastVerifiedKbSignature: string | null = null;
+
 export async function retrieveSystemKnowledge(params: {
   query: string;
   activeTab?: string;
   topK?: number;
-  userKeys?: { openaiApiKey?: string | null; geminiApiKey?: string | null };
 }): Promise<{
   chunks: RetrievedSystemKnowledgeChunk[];
   totalIndexedChunks: number;
   embeddingModelUsed: string;
 }> {
-  const { query, activeTab, topK = 6, userKeys } = params;
+  const { query, activeTab, topK = 6 } = params;
 
   type StoredChunkRow = {
     id: string;
@@ -77,9 +77,22 @@ export async function retrieveSystemKnowledge(params: {
   );
 
   if (hasSystemKbDelegate) {
+    if (!lastVerifiedKbSignature) {
+      const diskDocs = await loadKnowledgeDocumentsFromDisk();
+      const diskSig = diskDocs.map((d) => `${d.frontmatter.docId}:${d.contentHash}`).sort().join('|');
+      const dbDocs = await prisma.systemKnowledgeDocument.findMany({
+        select: { docId: true, contentHash: true },
+      });
+      const dbSig = dbDocs.map((d) => `${d.docId}:${d.contentHash}`).sort().join('|');
+      if (diskSig !== dbSig) {
+        await syncSystemKnowledgeBase();
+      }
+      lastVerifiedKbSignature = diskSig;
+    }
+
     allChunks = await prisma.systemKnowledgeChunk.findMany();
     if (allChunks.length === 0) {
-      await syncSystemKnowledgeBase({ userKeys });
+      await syncSystemKnowledgeBase();
       allChunks = await prisma.systemKnowledgeChunk.findMany();
     }
   } else {
@@ -104,22 +117,9 @@ export async function retrieveSystemKnowledge(params: {
     return { chunks: [], totalIndexedChunks: 0, embeddingModelUsed: 'none' };
   }
 
-  const hasExternal = allChunks.some(
-    (c) => c.embeddingModel === 'text-embedding-3-small' || c.embeddingModel === 'text-embedding-004'
-  );
-
-  let queryVector: number[];
-  let queryModel = 'financial-semantic-v1';
-
-  if (hasExternal) {
-    const res = await generateEmbeddingsBatch([query], userKeys);
-    queryVector = res.vectors[0] || computeDeterministicFinancialEmbedding(query);
-    queryModel = res.model;
-  } else {
-    queryVector = computeDeterministicFinancialEmbedding(query);
-  }
-
-  const localQueryVec = computeDeterministicFinancialEmbedding(query);
+  const queryModel = 'financial-semantic-v1';
+  const queryVector = computeDeterministicFinancialEmbedding(query);
+  const localQueryVec = queryVector;
   const queryTokens = normalizeTokens(query);
 
   const scored: RetrievedSystemKnowledgeChunk[] = allChunks.map((chunk) => {

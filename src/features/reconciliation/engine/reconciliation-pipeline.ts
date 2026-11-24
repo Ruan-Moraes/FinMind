@@ -1,5 +1,6 @@
 import { resolveMovementDecision } from "@/features/reconciliation/engine/movement-decision-resolver";
 import { formatCentsToBRL } from '@/shared/lib/currency';
+import { resolveEffectiveRulesForMonth } from '@/features/planning/domain/recurrence-month-skip';
 import { computeDeterministicHash, ParsedStatementFileResult, parseMultipleStatementFiles, StatementFileInput } from '@/features/reconciliation/parsers';
 import { scoreExistingTransactionCandidate, scoreRecurrenceRuleCandidate } from '@/features/reconciliation/engine/candidate-scorer';
 import { buildCreditCardPaymentReconciledItem, buildDuplicateReconciledItem, buildReviewPlanSummary, buildSelfTransferReconciledItem } from '@/features/reconciliation/engine/item-decision-builder';
@@ -149,7 +150,12 @@ export async function runIntelligentReconciliationPipeline(params: {
             mov, existingInvoices, matchedCategory, }) );
         continue;
       }
-      const ruleEvaluations = recurrenceRules
+      const [movYear, movMonth] = monthKey.split('-').map(Number);
+      const effectiveRulesForMovMonth =
+        movYear && movMonth
+          ? resolveEffectiveRulesForMonth(recurrenceRules, movYear, movMonth)
+          : recurrenceRules;
+      const ruleEvaluations = effectiveRulesForMovMonth
         .filter((r) => !claimedRuleMonthKeys.has(`${monthKey}::${r.id}`))
         .map((rule) => ({
           rule, evalResult: scoreRecurrenceRuleCandidate({
@@ -188,7 +194,7 @@ export async function runIntelligentReconciliationPipeline(params: {
       }
       const bestRule = ruleEvaluations[0];
       const bestTx = txEvaluations[0];
-      const sameValueRules = recurrenceRules.filter( (r) =>
+      const sameValueRules = effectiveRulesForMovMonth.filter( (r) =>
           (r.type === 'INCOME' ? 'INFLOW' : 'OUTFLOW') === mov.direction &&
           Math.abs(r.amountInCents - mov.amountInCents) <= r.amountInCents * 0.05 );
       const isGenericDesc = isGenericBankDescription(mov.originalDescription);

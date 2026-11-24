@@ -5,6 +5,8 @@ import type {
   UiStateSnapshot,
 } from '@/features/ai-agent/domain/agent-types';
 import type { ProviderToolCallResult } from '@/features/ai-agent/services/agent-tool-provider-client';
+import { buildScreenshotArgsForTab } from '@/features/ai-agent/services/agent-screenshot-presets';
+import { buildRichGuidePlaybook } from '@/features/ai-agent/services/agent-guide-playbooks';
 
 function normalizeText(raw: string): string {
   return raw
@@ -28,22 +30,11 @@ export function detectDeterministicToolCall(
 ): ProviderToolCallResult | null {
   const norm = normalizeText(message);
 
-  if (/\b(print|screenshot|captura de tela|captura|foto da tela|imagem da tela)\b/.test(norm)) {
-    if (/\b(meta|metas|estatico|custo fixo)\b/.test(norm)) {
-      return {
-        name: 'capture_annotated_screen',
-        args: {
-          tab: 'goals',
-          title: 'Guia Visual: Metas de Carteira & Custos Estáticos',
-          annotations: [
-            { targetId: 'nav.tab.goals', label: 'Aba Metas & Custos Estáticos' },
-            { targetId: 'goals.btn.create', label: 'Clique aqui para criar uma Meta' },
-            { targetId: 'goals.btn.createExpenseRule', label: 'Cadastre Custos Estáticos aqui' },
-          ],
-        },
-      };
+  if (/\b(print[a-z]*|screenshot|captur[a-z]*|foto[s]?|fotograf[a-z]*|imagem da tela)/.test(norm)) {
+    if (/\b(meta[s]?|estatic[oa][s]?|custo[s]? fixo[s]?|ganho[s]? fixo[s]?)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('goals') };
     }
-    if (/\b(configurac|feriado|estado|cidade|preferencia)\b/.test(norm)) {
+    if (/\b(configurac|feriado[s]?|estado[s]?|cidade[s]?|preferencia[s]?)/.test(norm)) {
       return {
         name: 'capture_annotated_screen',
         args: {
@@ -58,74 +49,79 @@ export function detectDeterministicToolCall(
         },
       };
     }
-    if (/\b(extrato|lancamento|filtro|transac)\b/.test(norm)) {
-      return {
-        name: 'capture_annotated_screen',
-        args: {
-          tab: 'transactions',
-          title: 'Guia Visual: Extrato & Filtros de Lançamentos',
-          annotations: [
-            { targetId: 'transactions.filter.search', label: 'Busque por descrição ou #tag' },
-            { targetId: 'transactions.filter.type', label: 'Filtre por Receita ou Despesa' },
-            { targetId: 'header.btn.newTx', label: 'Clique para Novo Lançamento' },
-          ],
-        },
-      };
+    if (/\b(extrato[s]?|lancamento[s]?|filtro[s]?|transac)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('transactions') };
     }
-    return {
-      name: 'capture_annotated_screen',
-      args: {
-        tab: 'overview',
-        title: 'Guia Visual: Visão Geral do FinMind',
-        annotations: [
-          { targetId: 'overview.kpis', label: 'Resumo do mês e saldo consolidado' },
-          { targetId: 'header.btn.settings', label: 'Configurações, Estado/Cidade e Feriados' },
-          { targetId: 'header.btn.newTx', label: 'Atalho para Novo Lançamento' },
-        ],
-      },
-    };
+    if (/\b(previsao|previsoes|vou ganhar|provavel gasto)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('forecast') };
+    }
+    if (/\b(conta[s]?|cartao|cartoes|fatura[s]?)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('accounts') };
+    }
+    if (/\b(copiloto|diagnostico[s]?|conciliacao)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('ai') };
+    }
+    if (/\b(visao geral|inicio|dashboard)/.test(norm)) {
+      return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab('overview') };
+    }
+    return { name: 'capture_annotated_screen', args: buildScreenshotArgsForTab(uiState.activeTab) };
   }
 
-  if (/\b(como faco|como faz|como cadastr|como cri|como edit|onde fica|onde configur|me ensine|me mostre como|demonstr)\b/.test(norm)) {
-    if (/\b(meta|patrimonio|carteira)\b/.test(norm)) {
+  const isGuideQuestion =
+    /\b(como\s+(faco|faz|fazer|configur[a-z]*|cadastr[a-z]*|cri[a-z]*|edit[a-z]*|alter[a-z]*|mud[a-z]*|adicion[a-z]*|exclu[a-z]*|remov[a-z]*|apag[a-z]*|pul[a-z]*|reativ[a-z]*|us[a-z]*|funciona[a-z]*|import[a-z]*|export[a-z]*|pag[a-z]*|ver|visualiz[a-z]*|ajust[a-z]*)|onde\s+(fica[a-z]*|esta[a-z]*|configur[a-z]*|alter[a-z]*|cadastr[a-z]*|vejo|encontr[a-z]*|acess[a-z]*|posso)|me\s+ensin[a-z]*|me\s+mostre\s+como|demonstr[a-z]*|passo\s+a\s+passo|tutorial)/.test(
+      norm
+    );
+
+  if (isGuideQuestion) {
+    if (/\b(feriado[s]?|estado[s]?|cidade[s]?|uf\b|dia util|dias uteis|configurac|ciclo mensal|tema|backup|snapshot|privacidad)/.test(norm)) {
+      const settingsTopic = /\b(backup|snapshot)/.test(norm)
+        ? 'Exportar e Restaurar Backup (Snapshot)'
+        : /\b(tema|claro|escuro|aparencia)/.test(norm)
+          ? 'Alterar Tema e Aparência'
+          : /\bprivacidad/.test(norm)
+            ? 'Configurar Modo Privacidade'
+            : /\bciclo mensal/.test(norm)
+              ? 'Configurar Ciclo Mensal e Preferências'
+              : 'Configurar Estado, Cidade e Feriados';
       return {
         name: 'guide_feature_workflow',
-        args: { tab: 'goals', topic: 'Cadastrar uma nova Meta de Carteira', highlightTargetId: 'goals.btn.create', openModalType: 'GOAL' },
+        args: { tab: uiState.activeTab, topic: settingsTopic, highlightTargetId: 'header.btn.settings', openModalType: 'SETTINGS' },
       };
     }
-    if (/\b(feriado|estado|cidade|uf|dia util|configurac|ciclo mensal)\b/.test(norm)) {
-      return {
-        name: 'guide_feature_workflow',
-        args: { tab: uiState.activeTab, topic: 'Configurar Estado, Cidade e Feriados', highlightTargetId: 'header.btn.settings', openModalType: 'SETTINGS' },
-      };
+    if (/\b(orcamento[s]?|limite[s]? de gasto|teto[s]? de gasto|teto mensal)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: 'Configurar Limites de Gastos por Categoria', highlightTargetId: 'goals.section.budgets', openModalType: 'BUDGET' } };
     }
-    if (/\b(custo estatico|ganho estatico|fixo|recorrente)\b/.test(norm)) {
-      return {
-        name: 'guide_feature_workflow',
-        args: { tab: 'goals', topic: 'Cadastrar Custos ou Ganhos Estáticos', highlightTargetId: 'goals.btn.createExpenseRule', openModalType: 'STATIC_RULE' },
-      };
+    if (/\bcategoria[s]?\b/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: 'Configurar Categorias de Gastos e Ganhos', highlightTargetId: 'goals.section.categories', openModalType: 'CATEGORY' } };
     }
-    if (/\b(previsao|vou ganhar|provavel gasto)\b/.test(norm)) {
-      return {
-        name: 'guide_feature_workflow',
-        args: { tab: 'forecast', topic: 'Usar a aba Previsão de Valor', highlightTargetId: 'forecast.btn.addIncome' },
-      };
+    if (/\b(meta[s]?|patrimonio|carteira)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: 'Cadastrar uma nova Meta de Carteira', highlightTargetId: 'goals.btn.create', openModalType: 'GOAL' } };
     }
-    if (/\b(conta|cartao|fatura)\b/.test(norm)) {
-      return {
-        name: 'guide_feature_workflow',
-        args: { tab: 'accounts', topic: 'Gerenciar Contas e Cartões', highlightTargetId: 'accounts.btn.createAccount' },
-      };
+    if (/\b(custo[s]? estatico|ganho[s]? estatico|estatico[s]?|fixo[s]?|fixa[s]?|recorrente[s]?|pular mes)/.test(norm)) {
+      const staticTopic = /\bpular mes/.test(norm) ? 'Pular mês em Regras Fixas Mensais' : 'Gerenciar Custos e Ganhos Estáticos';
+      return { name: 'guide_feature_workflow', args: { tab: 'goals', topic: staticTopic, highlightTargetId: 'goals.section.staticRules', openModalType: 'STATIC_RULE' } };
     }
-    if (/\b(lancamento|despesa|receita|extrato)\b/.test(norm)) {
-      return {
-        name: 'guide_feature_workflow',
-        args: { tab: 'transactions', topic: 'Registrar um Novo Lançamento', highlightTargetId: 'header.btn.newTx', openModalType: 'TX' },
-      };
+    if (/\b(previsao|previsoes|vou ganhar|provavel gasto)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'forecast', topic: 'Usar a aba Previsão de Valor', highlightTargetId: 'forecast.btn.addIncome' } };
+    }
+    if (/\b(cartao|cartoes|fatura[s]?)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'accounts', topic: 'Cadastrar Cartão de Crédito', highlightTargetId: 'accounts.btn.createCard', openModalType: 'CARD' } };
+    }
+    if (/\b(conta[s]?|banco)\b/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'accounts', topic: 'Cadastrar Conta Bancária', highlightTargetId: 'accounts.btn.createAccount', openModalType: 'ACCOUNT' } };
+    }
+    if (/\b(lancamento[s]?|despesa[s]?|receita[s]?|extrato[s]?|filtro[s]?)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'transactions', topic: 'Registrar ou Filtrar Lançamentos', highlightTargetId: 'header.btn.newTx', openModalType: 'TX' } };
+    }
+    if (/\b(provedor|openai|gemini|claude|api key|chave de api|modelo[s]? de ia)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'ai', topic: 'Configurar Provedores e Chaves de API de IA', highlightTargetId: 'ai.panel.providers' } };
+    }
+    if (/\b(diagnostico[s]?|conciliacao|importar|copiloto)/.test(norm)) {
+      return { name: 'guide_feature_workflow', args: { tab: 'ai', topic: 'Usar Copiloto IA, Conciliação e Diagnósticos', highlightTargetId: 'ai.panel.healthReports' } };
     }
   }
 
-  if (/\b(alter|mud|atualiz|defin|cri|cadastr)[a-z]*\b.*\b(meta)\b/.test(norm)) {
+  if (/\b(alter|mud|atualiz|defin|cri|cadastr)[a-z]*\b.*\b(meta[s]?)/.test(norm)) {
     const amount = parseBrlAmount(message);
     if (amount) {
       const isEdit = /\b(alter|mud|atualiz)/.test(norm);
@@ -142,7 +138,7 @@ export function detectDeterministicToolCall(
     }
   }
 
-  if (/\b(configur|defin|alter|mud)[a-z]*\b.*\b(estado|uf|cidade|ciclo mensal|tema)\b/.test(norm)) {
+  if (/\b(configur|defin|alter|mud)[a-z]*\b.*\b(estado|uf\b|cidade|ciclo mensal|tema)/.test(norm)) {
     const args: Record<string, unknown> = {};
     const ufMatch = message.match(/\b(?:estado|uf)\s+(?:para\s+)?([A-Z]{2})\b/i);
     if (ufMatch) args.holidayState = ufMatch[1].toUpperCase();
@@ -155,7 +151,7 @@ export function detectDeterministicToolCall(
     if (Object.keys(args).length > 0) return { name: 'update_user_preferences', args };
   }
 
-  if (/\b(filtr|busc|pesquis|mostr)[a-z]*\b.*\b(extrato|lancamento|despesa|receita|estatico)/.test(norm) && !/\bgrafico\b/.test(norm)) {
+  if (/\b(filtr|busc|pesquis|mostr)[a-z]*\b.*\b(extrato|lancamento|despesa|receita|estatico)/.test(norm) && !/\bgrafico/.test(norm)) {
     const filterType = /\bdespesa/.test(norm) ? 'EXPENSE' : /\breceita/.test(norm) ? 'INCOME' : /\btransfer/.test(norm) ? 'TRANSFER' : 'ALL';
     const filterNature = /\b(estatic|fix[oa])/.test(norm) ? 'STATIC' : /\bvariave/.test(norm) ? 'VARIABLE' : 'ALL';
     const qMatch = message.match(/(?:por|com|chamado|contendo)\s+"?([^".,!?]{2,40})"?/i);
@@ -169,18 +165,52 @@ export function detectDeterministicToolCall(
     };
   }
 
-  if (/\b(va para|ir para|abra|abrir|navegue|levar para)\b/.test(norm)) {
-    if (/\b(configurac|preferencia|feriado)\b/.test(norm)) return { name: 'open_settings', args: {} };
-    if (/\b(meta|estatico)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'goals' } };
-    if (/\b(previsao)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'forecast' } };
-    if (/\b(conta|cartao)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'accounts' } };
-    if (/\b(extrato|lancamento)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'transactions' } };
-    if (/\b(comparativo)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'comparison' } };
-    if (/\b(copiloto|conciliacao|diagnostico)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'ai' } };
-    if (/\b(visao geral|inicio|dashboard)\b/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'overview' } };
+  if (
+    /\b(va para|ir para|abra|abrir|navegue|levar para|mostre\s+(a\s+|minha\s+)?tela)\b/.test(norm) &&
+    !/\b(grafic[oa]|pizza|rosca|donut|barra[s]?|linha[s]?|tabela|relatori[oa]|analis[a-z]*|compar[a-z]*)\b/.test(norm)
+  ) {
+    if (/\b(configurac|preferencia|feriado)/.test(norm)) return { name: 'open_settings', args: {} };
+    if (/\b(meta|estatico)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'goals' } };
+    if (/\b(previsao)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'forecast' } };
+    if (/\b(conta|cartao|cartoes)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'accounts' } };
+    if (/\b(extrato|lancamento)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'transactions' } };
+    if (/\b(comparativo)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'comparison' } };
+    if (/\b(copiloto|conciliacao|diagnostico)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'ai' } };
+    if (/\b(visao geral|inicio|dashboard)/.test(norm)) return { name: 'navigate_to_section', args: { tab: 'overview' } };
   }
 
   return null;
+}
+
+export function detectDeterministicToolCalls(
+  message: string,
+  uiState: UiStateSnapshot
+): ProviderToolCallResult[] {
+  const primary = detectDeterministicToolCall(message, uiState);
+  if (!primary) return [];
+  const norm = normalizeText(message);
+  // Suporte local a pedido composto: "mostre como configurar X e configure-a para mim"
+  if (
+    primary.name === 'guide_feature_workflow' &&
+    /\b(e\s+(configure|crie|cadastre|altere|atualize|faca)|configure[- ]?[ao]?\s+para\s+mim)\b/.test(norm)
+  ) {
+    const amount = parseBrlAmount(message);
+    if (primary.args.tab === 'goals' && amount) {
+      return [
+        primary,
+        {
+          name: 'upsert_portfolio_goal',
+          args: {
+            title: 'Nova Meta de Carteira',
+            targetAmountBRL: amount,
+            targetMonth: uiState.selectedMonth,
+            targetYear: uiState.selectedYear,
+          },
+        },
+      ];
+    }
+  }
+  return [primary];
 }
 
 export function buildGuideSteps(args: {
@@ -189,16 +219,7 @@ export function buildGuideSteps(args: {
   highlightTargetId?: string;
   openModalType?: string;
 }): AgentVisualStep[] {
-  const steps: AgentVisualStep[] = [
-    { id: 'g1', action: 'SWITCH_TAB', tab: args.tab, targetId: `nav.tab.${args.tab}`, caption: `Abrindo aba de ${args.topic}` },
-  ];
-  if (args.highlightTargetId) {
-    steps.push({ id: 'g2', action: 'HIGHLIGHT', targetId: args.highlightTargetId, caption: `Localizando controle: ${args.topic}`, pauseMs: 650 });
-  }
-  if (args.openModalType) {
-    steps.push({ id: 'g3', action: 'OPEN_MODAL', modalType: args.openModalType, targetId: args.highlightTargetId, caption: 'Abrindo formulário para demonstração (sem salvar)', pauseMs: 650 });
-  }
-  return steps;
+  return buildRichGuidePlaybook(args);
 }
 
 export function buildScreenshotDirective(args: {

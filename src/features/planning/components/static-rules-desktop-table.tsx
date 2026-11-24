@@ -30,15 +30,16 @@ export function StaticRulesDesktopTable({ togglingId, onToggleSkip }: StaticRule
   const { router, hideValues, setPendingDelete, handleOpenEditStaticRuleModal } = wb;
   const [editingAmountId, setEditingAmountId] = React.useState<string | null>(null);
 
-  const staticTxs = transactions.filter((t) => t.nature === 'STATIC');
+  const staticTxs = transactions.filter((t) => t.nature === 'STATIC' && t.status !== 'PENDING');
   const nextMonthLabel = getNextMonthLabelPt(selectedYear, selectedMonth);
 
   const activeRules = recurrenceRules.filter((r) => !isRuleSkippedInMonth(r, selectedYear, selectedMonth));
+  const activeStaticRules = activeRules.filter((r) => r.nature === 'STATIC');
   const skippedCount = recurrenceRules.length - activeRules.length;
-  const rulesIncomeTotal = activeRules
+  const rulesIncomeTotal = activeStaticRules
     .filter((r) => r.type === 'INCOME')
     .reduce((acc, r) => acc + getRuleEffectiveAmountForMonth(r, selectedYear, selectedMonth), 0);
-  const rulesExpenseTotal = activeRules
+  const rulesExpenseTotal = activeStaticRules
     .filter((r) => r.type === 'EXPENSE')
     .reduce((acc, r) => acc + getRuleEffectiveAmountForMonth(r, selectedYear, selectedMonth), 0);
 
@@ -46,6 +47,7 @@ export function StaticRulesDesktopTable({ togglingId, onToggleSkip }: StaticRule
     const ruleNorm = normalizeText(rule.description);
     return staticTxs.some((tx) => {
       if (tx.type !== rule.type) return false;
+      if ('recurrenceRuleId' in tx && tx.recurrenceRuleId === rule.id) return true;
       const txNorm = normalizeText(tx.description);
       return (
         txNorm === ruleNorm || txNorm.includes(ruleNorm) || ruleNorm.includes(txNorm) ||
@@ -55,7 +57,7 @@ export function StaticRulesDesktopTable({ togglingId, onToggleSkip }: StaticRule
   };
 
   return (
-    <div className="hidden md:block rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
+    <div data-agent-id="goals.table.staticRules" className="hidden md:block rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5 border-b border-slate-100 dark:border-zinc-800/80">
         <div className="flex items-center gap-2.5 text-xs font-semibold text-slate-900 dark:text-zinc-100">
           <CalendarClock className="h-4 w-4 text-indigo-500 shrink-0" />

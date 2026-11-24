@@ -8,8 +8,19 @@ import { parseInputToCents } from '@/shared/lib/currency';
 function parseIsoDateNoonUtc(dateStr: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
   if (!match) return null;
-  const dt = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12, 0, 0));
-  return Number.isNaN(dt.getTime()) ? null : dt;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const dt = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (
+    Number.isNaN(dt.getTime()) ||
+    dt.getUTCFullYear() !== year ||
+    dt.getUTCMonth() + 1 !== month ||
+    dt.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return dt;
 }
 
 export async function createValueForecastItemAction(data: {

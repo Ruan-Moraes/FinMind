@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Sincroniza o schema Prisma (`prisma/schema.prisma`) com um banco remoto Turso (libSQL)
- * de forma idempotente (`CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`).
+ * de forma idempotente (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ADD COLUMN` para colunas novas
+ * em tabelas existentes, e `CREATE INDEX IF NOT EXISTS`).
  *
  * Uso:
  *   pnpm db:push:turso              # aplica no TURSO_DATABASE_URL do .env / ambiente
@@ -43,6 +44,31 @@ function splitIdempotentSql(rawSql) {
     );
 }
 
+function extractMissingColumnsAlterSql(createTableSql, existingCols) {
+  const headerMatch = /^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?([A-Za-z0-9_]+)["`]?\s*\(/i.exec(
+    createTableSql.trim()
+  );
+  if (!headerMatch) return [];
+  const tableName = headerMatch[1];
+  const openIdx = createTableSql.indexOf('(');
+  const closeIdx = createTableSql.lastIndexOf(')');
+  if (openIdx < 0 || closeIdx <= openIdx) return [];
+
+  const existing = new Set(existingCols.map((c) => String(c).toLowerCase()));
+  const body = createTableSql.slice(openIdx + 1, closeIdx);
+  const alters = [];
+
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim().replace(/,\s*$/, '');
+    if (!line || /^(CONSTRAINT|PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK)\b/i.test(line)) continue;
+    const colMatch = /^["`]?([A-Za-z0-9_]+)["`]?\s+(.+)$/.exec(line);
+    if (!colMatch || existing.has(colMatch[1].toLowerCase())) continue;
+    if (/\bPRIMARY\s+KEY\b/i.test(colMatch[2])) continue;
+    alters.push(`ALTER TABLE "${tableName}" ADD COLUMN ${line}`);
+  }
+  return alters;
+}
+
 async function main() {
   loadDotEnvIfPresent();
   const dryRun = process.argv.includes('--dry-run');
@@ -66,11 +92,23 @@ async function main() {
   }
 
   const client = createClient({ url, authToken: authToken || undefined });
+  let addedColumns = 0;
   try {
     for (const sql of statements) {
       await client.execute(sql);
+      const tableMatch = /^CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+["`]?([A-Za-z0-9_]+)["`]?/i.exec(sql);
+      if (tableMatch) {
+        const info = await client.execute(`PRAGMA table_info("${tableMatch[1]}")`);
+        const existingCols = info.rows.map((r) => String(r.name ?? r[1] ?? ''));
+        for (const alterSql of extractMissingColumnsAlterSql(sql, existingCols)) {
+          await client.execute(alterSql);
+          addedColumns += 1;
+        }
+      }
     }
-    console.log(`[Turso Sync] ${statements.length} instruções DDL aplicadas com sucesso em ${url}.`);
+    console.log(
+      `[Turso Sync] ${statements.length} instruções DDL + ${addedColumns} coluna(s) nova(s) aplicadas em ${url}.`
+    );
   } finally {
     client.close();
   }

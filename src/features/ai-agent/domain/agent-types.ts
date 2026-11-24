@@ -1,6 +1,7 @@
 import type { ActiveTab } from '@/features/dashboard/types/workbench-types';
 import type { AssistantChartSpec } from '@/features/ai-copilot/assistant/assistant-chart-builder';
 import type { AgentTargetId } from '@/features/ai-agent/domain/agent-target-registry';
+import type { DynamicContentBlock } from '@/features/ai-agent/domain/dynamic-content-schemas';
 
 export type AgentInteractionMode = 'VISUAL' | 'GUIDED' | 'FAST';
 
@@ -65,6 +66,17 @@ export interface AgentVisualStep {
   fieldValue?: string;
   caption: string;
   pauseMs?: number;
+  tooltipTitle?: string;
+  tooltipBody?: string;
+  tooltipPlacement?: 'auto' | 'top' | 'bottom' | 'left' | 'right';
+  tone?: 'indigo' | 'emerald' | 'amber';
+  fallbackTextMatch?: string;
+  persistCoachmark?: boolean;
+}
+
+export interface CoachmarkTourState {
+  steps: AgentVisualStep[];
+  activeIndex: number;
 }
 
 export interface ScreenshotAnnotationSpec {
@@ -113,6 +125,21 @@ export interface AgentKnowledgeCitation {
   score: number;
 }
 
+export interface AgentTraceStep {
+  toolName: string;
+  phase: 'READ_DATA' | 'RENDER_UI' | 'UI_ACTION' | 'MUTATION_PLAN' | 'VALIDATION';
+  status: 'OK' | 'RETRY' | 'ERROR';
+  durationMs: number;
+  note?: string;
+}
+
+export interface AgentExecutionTrace {
+  iterations: number;
+  retriedForAlignment: boolean;
+  validationNote?: string;
+  steps: AgentTraceStep[];
+}
+
 export interface AgentTurnPayload {
   runId: string;
   modality: AgentModality;
@@ -133,6 +160,8 @@ export interface AgentTurnPayload {
     reversible?: boolean;
   } | null;
   charts?: AssistantChartSpec[];
+  contentBlocks?: DynamicContentBlock[];
+  executionTrace?: AgentExecutionTrace;
   historicalFacts?: string[];
   calculatedResults?: string[];
   projectionsAndEstimates?: string[];

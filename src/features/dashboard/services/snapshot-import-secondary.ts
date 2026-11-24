@@ -151,5 +151,10 @@ export async function restoreSecondarySnapshotEntities(
       create: { userId, ...settingsFields },
       update: settingsFields,
     });
+  } else {
+    await tx.userSettings.updateMany({
+      where: { userId },
+      data: { defaultAccountId: null },
+    });
   }
 }

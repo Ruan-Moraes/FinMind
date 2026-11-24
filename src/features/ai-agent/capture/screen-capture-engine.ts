@@ -21,7 +21,9 @@ export async function captureAnnotatedScreenClient(params: {
 
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
-  const openDialogs = document.querySelectorAll('[role="dialog"]');
+  const openDialogs = Array.from(document.querySelectorAll('[role="dialog"]')).filter(
+    (el) => el.getAttribute('data-agent-capture-ignore') !== 'true'
+  );
   const captureRoot =
     (openDialogs.length > 0 ? (openDialogs[openDialogs.length - 1] as HTMLElement) : null) ||
     (document.querySelector('[data-agent-capture-root="true"]') as HTMLElement | null) ||

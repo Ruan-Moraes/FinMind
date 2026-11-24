@@ -109,29 +109,58 @@ export async function runAgentVisualSteps(params: {
   signal: AbortSignal;
   bridge: WorkbenchBridgeActions;
   callbacks: VisualRunCallbacks;
-}): Promise<{ completedSteps: number; interrupted: boolean; failedReason?: string }> {
+}): Promise<{
+  completedSteps: number;
+  interrupted: boolean;
+  coachmarkSteps: AgentVisualStep[];
+  initialCoachmarkIndex: number;
+  failedReason?: string;
+}> {
   const { steps, mode, signal, bridge, callbacks } = params;
   const fast = mode === 'FAST';
+  const guided = mode === 'GUIDED';
   let curX = typeof window !== 'undefined' ? window.innerWidth * 0.78 : 600;
   let curY = typeof window !== 'undefined' ? window.innerHeight * 0.72 : 400;
 
+  const coachmarkSteps = steps.filter((s) => Boolean(s.tooltipBody && s.targetId));
+  let coachmarkSeenCount = 0;
+
   for (let i = 0; i < steps.length; i += 1) {
-    if (signal.aborted) return { completedSteps: i, interrupted: true };
+    if (signal.aborted) {
+      return { completedSteps: i, interrupted: true, coachmarkSteps: [], initialCoachmarkIndex: 0 };
+    }
     await callbacks.waitIfPaused();
-    if (signal.aborted) return { completedSteps: i, interrupted: true };
+    if (signal.aborted) {
+      return { completedSteps: i, interrupted: true, coachmarkSteps: [], initialCoachmarkIndex: 0 };
+    }
 
     const step = steps[i];
     callbacks.onStepProgress(i, step.caption);
+    const isCoachmarkStep = Boolean(step.tooltipBody && step.targetId);
+    if (isCoachmarkStep) coachmarkSeenCount += 1;
 
     let targetEl: HTMLElement | null = null;
     if (step.targetId) {
-      targetEl = await waitForAgentTarget(step.targetId, signal, 3200);
-      if (signal.aborted) return { completedSteps: i, interrupted: true };
+      targetEl = await waitForAgentTarget(step.targetId, signal, 3200, step.fallbackTextMatch);
+      if (signal.aborted) {
+        return { completedSteps: i, interrupted: true, coachmarkSteps: [], initialCoachmarkIndex: 0 };
+      }
       if (targetEl) {
         const rect = await scrollTargetIntoViewSmooth(targetEl, fast);
         const destX = rect.left + Math.min(rect.width * 0.5, 160);
-        const destY = rect.top + rect.height * 0.5;
-        callbacks.setSpotlight({ targetId: step.targetId, label: step.caption, tone: 'indigo' });
+        const destY = rect.top + Math.min(rect.height * 0.5, 48);
+        callbacks.setSpotlight({
+          targetId: step.targetId,
+          fallbackTextMatch: step.fallbackTextMatch,
+          label: step.caption,
+          tooltipTitle: step.tooltipTitle,
+          tooltipBody: step.tooltipBody,
+          tooltipPlacement: step.tooltipPlacement,
+          tone: step.tone || 'indigo',
+          stepNumber: isCoachmarkStep ? coachmarkSeenCount : undefined,
+          totalSteps: isCoachmarkStep ? coachmarkSteps.length : undefined,
+          interactive: false,
+        });
         const pos = await animateCursorBezier({
           fromX: curX,
           fromY: curY,
@@ -162,7 +191,7 @@ export async function runAgentVisualSteps(params: {
         callbacks.setCursor((p) => ({ ...p, clicking: false }));
       }
       bridge.openModal(step.modalType, step.modalPayload);
-      await sleepAbortable(fast ? 80 : 280, signal);
+      await sleepAbortable(fast ? 90 : 320, signal);
     } else if (step.action === 'CLOSE_MODAL') {
       bridge.closeModal();
       await sleepAbortable(fast ? 50 : 180, signal);
@@ -183,11 +212,27 @@ export async function runAgentVisualSteps(params: {
     } else if (step.action === 'FILL_FIELD' && targetEl && step.fieldValue !== undefined) {
       targetEl.focus();
       setReactControlledFieldValue(targetEl, step.fieldValue);
-      await sleepAbortable(fast ? 50 : 260, signal);
+      await sleepAbortable(fast ? 50 : 340, signal);
     } else if (step.action === 'HIGHLIGHT' || step.action === 'SCROLL_TO' || step.action === 'WAIT_PAINT') {
-      await sleepAbortable(fast ? 80 : step.pauseMs ?? 550, signal);
+      // No modo GUIADO, para no primeiro coachmark interativo para o usuário avançar no seu ritmo
+      if (guided && isCoachmarkStep && coachmarkSteps.length > 0) {
+        return {
+          completedSteps: i + 1,
+          interrupted: false,
+          coachmarkSteps,
+          initialCoachmarkIndex: 0,
+        };
+      }
+      const defaultPause = isCoachmarkStep ? 1500 : 550;
+      await sleepAbortable(fast ? 80 : step.pauseMs ?? defaultPause, signal);
     }
   }
 
-  return { completedSteps: steps.length, interrupted: signal.aborted };
+  const shouldPersist = coachmarkSteps.some((s) => s.persistCoachmark);
+  return {
+    completedSteps: steps.length,
+    interrupted: signal.aborted,
+    coachmarkSteps: shouldPersist ? coachmarkSteps : [],
+    initialCoachmarkIndex: shouldPersist ? Math.max(0, coachmarkSteps.length - 1) : 0,
+  };
 }

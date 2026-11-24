@@ -62,15 +62,16 @@ export function buildDynamicAssistantCharts(params: {
     ],
   });
 
-  const wantsCategories = /(gast|categori|economiz|onde|distribuic|pizza|donut|despes|maior|grafico)/.test(q);
+  const wantsOverviewOrChart = /(grafico|chart|resumo|visao geral|panorama|analis|relatori|balanco|diagnostico)/.test(q);
+  const wantsCategories = /(gast|categori|economiz|distribuic|pizza|donut|despes|maior|grafico)/.test(q);
   const wantsEvolution = /(evoluc|historic|meses|receit|compar|tendenc|fluxo|linha|barra|grafico)/.test(q);
   const wantsGoals = /(meta|objetiv|patrimoni|poup|alcanc|ritmo|quanto falta|carteira)/.test(q);
   const wantsStatic = /(estatic|fixo|fixa|compromiss|margem|orcament|renda livre)/.test(q);
 
-  // 2. Donut de distribuição de gastos por categoria
+  // 2. Donut de distribuição de gastos por categoria (somente quando relevante ou solicitado)
   if (
     params.monthSummary.categoryBreakdown.length > 0 &&
-    (wantsCategories || (!wantsEvolution && !wantsGoals && !wantsStatic))
+    (wantsCategories || wantsOverviewOrChart)
   ) {
     charts.push({
       id: 'donut-categories',
@@ -86,10 +87,10 @@ export function buildDynamicAssistantCharts(params: {
     });
   }
 
-  // 3. Barras de Evolução Receitas vs Despesas (últimos 6 meses)
+  // 3. Barras de Evolução Receitas vs Despesas (somente quando relevante ou solicitado)
   if (
     params.sixMonths.some((m) => m.receitas > 0 || m.despesas > 0) &&
-    (wantsEvolution || (!wantsCategories && !wantsGoals && !wantsStatic))
+    (wantsEvolution || wantsOverviewOrChart)
   ) {
     charts.push({
       id: 'bar-evolution',
@@ -104,8 +105,8 @@ export function buildDynamicAssistantCharts(params: {
     });
   }
 
-  // 4. Barras de Progresso das Metas de Carteira
-  if (params.portfolioGoals.length > 0 && (wantsGoals || charts.length < 2)) {
+  // 4. Barras de Progresso das Metas de Carteira (somente quando a pergunta envolve metas)
+  if (params.portfolioGoals.length > 0 && wantsGoals) {
     charts.push({
       id: 'progress-goals',
       kind: 'progress_bars',

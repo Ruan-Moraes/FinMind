@@ -1,6 +1,6 @@
 'use client';
 import * as React from 'react';
-import type { AiProviderId, AiConnectionMode } from '@/features/ai-copilot/providers';
+import type { AiProviderId } from '@/features/ai-copilot/providers';
 import { StatementUploadQueuePanel } from '@/features/reconciliation/components/statement-upload-queue-panel';
 import { ReconciliationMetricsAndFilters } from '@/features/reconciliation/components/reconciliation-metrics-and-filters';
 import { ImportBatchesHistoryAndModals } from '@/features/reconciliation/components/import-batches-history-and-modals';
@@ -30,7 +30,6 @@ export interface SerializedImportBatch {
 
 export interface StatementReconciliationWorkbenchProps {
   provider: AiProviderId;
-  connectionMode: AiConnectionMode;
   categories: Array<{
     id: string;
     name: string;

@@ -78,6 +78,7 @@ export function FinancialHealthReportsFiltersBar(props: {
             <option value="OPENAI">OpenAI (ChatGPT)</option>
             <option value="GEMINI">Google Gemini</option>
             <option value="CLAUDE">Anthropic Claude</option>
+            <option value="MOTOR_DETERMINISTICO">Motor Local</option>
           </Select>
         </div>
       </div>

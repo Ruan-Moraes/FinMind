@@ -27,7 +27,7 @@ export async function upsertPortfolioGoalForUser(userId: string, raw: unknown) {
   }
 
   if (data.id) {
-    await prisma.portfolioGoal.updateMany({
+    const res = await prisma.portfolioGoal.updateMany({
       where: { id: data.id, userId },
       data: {
         title: data.title,
@@ -37,6 +37,9 @@ export async function upsertPortfolioGoalForUser(userId: string, raw: unknown) {
         notes: data.notes?.trim() || null,
       },
     });
+    if (res.count === 0) {
+      return { ok: false as const, error: 'Meta de carteira não encontrada.' };
+    }
   } else {
     await prisma.portfolioGoal.create({
       data: {
@@ -68,6 +71,14 @@ export async function upsertBudgetForUser(userId: string, raw: unknown) {
   const maxAmountInCents = parseInputToCents(data.maxAmountRaw);
   if (maxAmountInCents <= 0) {
     return { ok: false as const, error: 'Selecione uma categoria e um limite maior que zero.' };
+  }
+
+  const categoryOwned = await prisma.category.findFirst({
+    where: { id: data.categoryId, userId },
+    select: { id: true },
+  });
+  if (!categoryOwned) {
+    return { ok: false as const, error: 'Categoria selecionada não encontrada.' };
   }
 
   await prisma.budget.upsert({
@@ -109,6 +120,21 @@ export async function saveRecurrenceRuleForUser(userId: string, raw: unknown) {
     return { ok: false as const, error: 'Preencha a descrição e o valor corretamente.' };
   }
 
+  if (data.categoryId) {
+    const catOwned = await prisma.category.findFirst({
+      where: { id: data.categoryId, userId },
+      select: { id: true },
+    });
+    if (!catOwned) return { ok: false as const, error: 'Categoria selecionada não encontrada.' };
+  }
+  if (data.accountId) {
+    const accOwned = await prisma.account.findFirst({
+      where: { id: data.accountId, userId },
+      select: { id: true },
+    });
+    if (!accOwned) return { ok: false as const, error: 'Conta selecionada não encontrada.' };
+  }
+
   const record = {
     description: data.description,
     type: data.type,
@@ -122,7 +148,10 @@ export async function saveRecurrenceRuleForUser(userId: string, raw: unknown) {
   };
 
   if (data.id) {
-    await prisma.recurrenceRule.updateMany({ where: { id: data.id, userId }, data: record });
+    const res = await prisma.recurrenceRule.updateMany({ where: { id: data.id, userId }, data: record });
+    if (res.count === 0) {
+      return { ok: false as const, error: 'Regra fixa não encontrada.' };
+    }
   } else {
     await prisma.recurrenceRule.create({ data: { userId, ...record } });
   }
@@ -143,7 +172,7 @@ export async function saveCategoryForUser(userId: string, raw: unknown) {
 
   const data = parsed.data;
   if (data.id) {
-    await prisma.category.updateMany({
+    const res = await prisma.category.updateMany({
       where: { id: data.id, userId },
       data: {
         name: data.name,
@@ -153,6 +182,9 @@ export async function saveCategoryForUser(userId: string, raw: unknown) {
         ...(data.icon ? { icon: data.icon } : {}),
       },
     });
+    if (res.count === 0) {
+      return { ok: false as const, error: 'Categoria não encontrada.' };
+    }
   } else {
     await prisma.category.create({
       data: {
@@ -166,10 +198,12 @@ export async function saveCategoryForUser(userId: string, raw: unknown) {
     });
   }
 
+  await syncKnowledgeSafe(userId);
   return { ok: true as const };
 }
 
 export async function deleteCategoryForUser(userId: string, id: string) {
   await prisma.category.deleteMany({ where: { id, userId } });
+  await syncKnowledgeSafe(userId);
   return { ok: true as const };
 }

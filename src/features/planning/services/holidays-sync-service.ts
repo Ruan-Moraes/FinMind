@@ -1,4 +1,5 @@
 import { prisma } from '@/shared/lib/prisma';
+import { decryptSecret } from '@/features/auth/domain/secret-crypto';
 import {
   buildFallbackNationalHolidays,
   buildStateHolidays,
@@ -27,15 +28,14 @@ export async function fetchNationalHolidaysForYear(year: number): Promise<{
   items: HolidaySeedItem[];
   source: 'BRASIL_API' | 'FALLBACK_LOCAL';
 }> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
     const res = await fetch(`https://brasilapi.com.br/api/feriados/v1/${year}`, {
       method: 'GET',
       signal: controller.signal,
       cache: 'no-store',
     });
-    clearTimeout(timeout);
 
     if (!res.ok) {
       return { items: buildFallbackNationalHolidays(year), source: 'FALLBACK_LOCAL' };
@@ -62,6 +62,8 @@ export async function fetchNationalHolidaysForYear(year: number): Promise<{
     return { items, source: 'BRASIL_API' };
   } catch {
     return { items: buildFallbackNationalHolidays(year), source: 'FALLBACK_LOCAL' };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -117,9 +119,9 @@ export async function discoverMunicipalHolidaysWithAi(params: {
       : user?.settings?.claudeModel || 'claude-3-5-sonnet-latest';
   const descriptor = getAiModelDescriptor(modelId);
   const route = resolveDynamicModelRoute(descriptor.id, {
-    openaiApiKey: user?.settings?.openaiApiKey,
-    geminiApiKey: user?.settings?.geminiApiKey,
-    claudeApiKey: user?.settings?.claudeApiKey,
+    openaiApiKey: decryptSecret(user?.settings?.openaiApiKey),
+    geminiApiKey: decryptSecret(user?.settings?.geminiApiKey),
+    claudeApiKey: decryptSecret(user?.settings?.claudeApiKey),
   });
 
   if (!route.hasExternalApiKey) {

@@ -19,7 +19,6 @@ import { useReconciliationCommitRevert } from '@/features/reconciliation/hooks/u
 export function useStatementReconciliation(props: StatementReconciliationWorkbenchProps) {
   const {
     provider,
-    connectionMode,
     categories,
     accounts,
     creditCards,
@@ -109,7 +108,6 @@ export function useStatementReconciliation(props: StatementReconciliationWorkben
           isBase64: f.isBase64,
         })),
         provider,
-        connectionMode,
       });
       if (!res.ok || !res.plan) {
         setReconcileBanner({

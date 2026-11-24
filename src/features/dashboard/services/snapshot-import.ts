@@ -58,6 +58,7 @@ export async function importUserSnapshot(
 
   await prisma.$transaction(async (tx) => {
     await tx.financialKnowledgeChunk.deleteMany({ where: { userId } });
+    await tx.agentActionAuditLog.deleteMany({ where: { userId } });
     await tx.attachment.deleteMany({ where: { transaction: { userId } } });
     await tx.transaction.deleteMany({ where: { userId } });
     await tx.statementImportFile.deleteMany({ where: { batch: { userId } } });
@@ -73,6 +74,8 @@ export async function importUserSnapshot(
     await tx.holiday.deleteMany({ where: { userId } });
     await tx.recurrenceRule.deleteMany({ where: { userId } });
     await tx.aiAnalysisReport.deleteMany({ where: { userId } });
+    await tx.aiChatMessage.deleteMany({ where: { session: { userId } } });
+    await tx.aiChatSession.deleteMany({ where: { userId } });
     await tx.account.deleteMany({ where: { userId } });
     await tx.subcategory.deleteMany({ where: { category: { userId } } });
     await tx.category.deleteMany({ where: { userId } });
@@ -144,7 +147,9 @@ export async function importUserSnapshot(
           id: maps.ruleMap.get(r.id)!, userId, description: r.description,
           type: r.type, nature: r.nature, amountInCents: r.amountInCents,
           frequency: r.frequency, dayOfMonth: r.dayOfMonth,
-          dayType: r.dayType, includeSaturday: r.includeSaturday, isActive: r.isActive,
+          dayType: r.dayType, includeSaturday: r.includeSaturday,
+          skippedMonths: r.skippedMonths, monthlyOverrides: r.monthlyOverrides,
+          isActive: r.isActive,
           categoryId: mapRef(maps.catMap, r.categoryId),
           accountId: mapRef(maps.accMap, r.accountId),
           creditCardId: mapRef(maps.cardMap, r.creditCardId),

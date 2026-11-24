@@ -1,13 +1,10 @@
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
-import {
-  DEFAULT_AI_MODEL_ID,
-  getAiModelDescriptor,
-  SSO_POPUP_TOKEN_PREFIX,
-} from '@/features/ai-copilot/models';
 import { getSession, isSessionExplicitlyLoggedOut } from '@/features/auth/services/session-cookies';
 import { isPublicAuthRequired } from '@/features/auth/domain/access-policy';
 import { decryptSecret } from '@/features/auth/domain/secret-crypto';
+
+const LEGACY_SIMULATED_TOKEN_PREFIX = 'sso_popup_token::';
 
 function withDecryptedSettings<
   T extends {
@@ -57,10 +54,10 @@ export async function ensurePersonalUserInitialized() {
             hideValuesByDefault: false,
             fiscalMonthStartDay: 1,
             aiProvider: 'OPENAI',
-            aiConnectionMode: 'API_QUOTA',
-            openaiModel: DEFAULT_AI_MODEL_ID,
-            geminiModel: 'gemini-2.0-flash',
-            claudeModel: 'claude-3-5-sonnet-latest',
+            aiConnectionMode: 'API_KEY',
+            openaiModel: '',
+            geminiModel: '',
+            claudeModel: '',
           },
         },
       },
@@ -75,47 +72,33 @@ export async function ensurePersonalUserInitialized() {
         hideValuesByDefault: false,
         fiscalMonthStartDay: 1,
         aiProvider: 'OPENAI',
-        aiConnectionMode: 'API_QUOTA',
-        openaiModel: DEFAULT_AI_MODEL_ID,
-        geminiModel: 'gemini-2.0-flash',
-        claudeModel: 'claude-3-5-sonnet-latest',
+        aiConnectionMode: 'API_KEY',
+        openaiModel: '',
+        geminiModel: '',
+        claudeModel: '',
       },
     });
     user = { ...user, settings };
   } else {
-    // Higieniza tokens de pop-up simulados legados e migra IDs de modelos fictícios para modelos reais
+    // Higieniza eventuais tokens legados simulados sem sobrescrever modelos reais escolhidos
     const s = user.settings;
-    const cleanOpenaiKey = s.openaiApiKey?.startsWith(SSO_POPUP_TOKEN_PREFIX)
-      ? ''
-      : s.openaiApiKey;
-    const cleanGeminiKey = s.geminiApiKey?.startsWith(SSO_POPUP_TOKEN_PREFIX)
-      ? ''
-      : s.geminiApiKey;
-    const cleanClaudeKey = s.claudeApiKey?.startsWith(SSO_POPUP_TOKEN_PREFIX)
-      ? ''
-      : s.claudeApiKey;
-
-    const realOpenaiModel = getAiModelDescriptor(s.openaiModel).id;
-    const realGeminiModel = getAiModelDescriptor(s.geminiModel).id;
-    const realClaudeModel = getAiModelDescriptor(s.claudeModel).id;
+    const cleanOpenaiKey = s.openaiApiKey?.startsWith(LEGACY_SIMULATED_TOKEN_PREFIX) ? null : s.openaiApiKey;
+    const cleanGeminiKey = s.geminiApiKey?.startsWith(LEGACY_SIMULATED_TOKEN_PREFIX) ? null : s.geminiApiKey;
+    const cleanClaudeKey = s.claudeApiKey?.startsWith(LEGACY_SIMULATED_TOKEN_PREFIX) ? null : s.claudeApiKey;
 
     if (
       cleanOpenaiKey !== s.openaiApiKey ||
       cleanGeminiKey !== s.geminiApiKey ||
       cleanClaudeKey !== s.claudeApiKey ||
-      realOpenaiModel !== s.openaiModel ||
-      realGeminiModel !== s.geminiModel ||
-      realClaudeModel !== s.claudeModel
+      s.aiConnectionMode !== 'API_KEY'
     ) {
       const updatedSettings = await prisma.userSettings.update({
         where: { userId: user.id },
         data: {
+          aiConnectionMode: 'API_KEY',
           openaiApiKey: cleanOpenaiKey,
           geminiApiKey: cleanGeminiKey,
           claudeApiKey: cleanClaudeKey,
-          openaiModel: realOpenaiModel,
-          geminiModel: realGeminiModel,
-          claudeModel: realClaudeModel,
         },
       });
       user = { ...user, settings: updatedSettings };

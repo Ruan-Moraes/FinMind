@@ -42,14 +42,25 @@ export function HolidaysManagerModal({ isOpen, onClose, draftStateCode, draftCit
   const [aiSuggestions, setAiSuggestions] = React.useState<HolidaySeedItem[]>([]);
   const [selectedAiDates, setSelectedAiDates] = React.useState<Record<string, boolean>>({});
 
+  const wasOpenRef = React.useRef(false);
+
   React.useEffect(() => {
-    if (!isOpen) return;
-    setYear(selectedYear);
-    setStateCode(draftStateCode !== undefined ? draftStateCode : settings.holidayState || '');
-    setCityName(draftCityName !== undefined ? draftCityName : settings.holidayCity || '');
-    setBanner(null);
-    setAiSuggestions([]);
+    if (isOpen && !wasOpenRef.current) {
+      setYear(selectedYear);
+      setStateCode(draftStateCode !== undefined ? draftStateCode : settings.holidayState || '');
+      setCityName(draftCityName !== undefined ? draftCityName : settings.holidayCity || '');
+      setBanner(null);
+      setAiSuggestions([]);
+    }
+    wasOpenRef.current = isOpen;
   }, [isOpen, selectedYear, settings.holidayState, settings.holidayCity, draftStateCode, draftCityName]);
+
+  const selectableYears = React.useMemo(
+    () =>
+      Array.from(new Set([selectedYear - 1, selectedYear, selectedYear + 1, selectedYear + 2, 2026, 2027, 2028]))
+        .filter((y) => y >= 2020 && y <= 2040).sort((a, b) => a - b),
+    [selectedYear]
+  );
 
   const handleSyncOfficial = async () => {
     setIsSyncing(true);
@@ -133,7 +144,7 @@ export function HolidaysManagerModal({ isOpen, onClose, draftStateCode, draftCit
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <FormField label="Ano de Referência">
             <Select value={String(year)} onChange={(e) => setYear(Number(e.target.value))}>
-              {[2026, 2027, 2028, 2029].map((y) => (
+              {selectableYears.map((y) => (
                 <option key={y} value={String(y)}>
                   {y}
                 </option>
@@ -164,12 +175,7 @@ export function HolidaysManagerModal({ isOpen, onClose, draftStateCode, draftCit
             <RefreshCw className="h-3.5 w-3.5" />
             <span>Sincronizar Nacionais + Estaduais (2026–2028)</span>
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            isLoading={isAskingAi}
-            onClick={() => void handleSuggestMunicipalAi()}
-          >
+          <Button variant="secondary" size="sm" isLoading={isAskingAi} onClick={() => void handleSuggestMunicipalAi()}>
             <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
             <span>Buscar Feriados da Cidade com IA ({year})</span>
           </Button>
@@ -212,15 +218,8 @@ export function HolidaysManagerModal({ isOpen, onClose, draftStateCode, draftCit
               })}
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="secondary" size="sm" onClick={() => setAiSuggestions([])}>
-                Descartar
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                isLoading={isSavingAi}
-                onClick={() => void handleConfirmAiSuggestions()}
-              >
+              <Button variant="secondary" size="sm" onClick={() => setAiSuggestions([])}>Descartar</Button>
+              <Button variant="primary" size="sm" isLoading={isSavingAi} onClick={() => void handleConfirmAiSuggestions()}>
                 <Check className="h-3.5 w-3.5" />
                 <span>Salvar Selecionados</span>
               </Button>
@@ -231,10 +230,12 @@ export function HolidaysManagerModal({ isOpen, onClose, draftStateCode, draftCit
         <HolidaysManagerList
           year={year}
           holidays={holidays}
-          stateCode={stateCode}
-          cityName={cityName}
           onAddManual={async (item) => {
-            await saveHolidaysBatchAction([{ ...item, stateCode: stateCode || null, cityName: cityName || null, source: 'MANUAL' }]);
+            const res = await saveHolidaysBatchAction([{ ...item, stateCode: stateCode || null, cityName: cityName || null, source: 'MANUAL' }]);
+            if (!res.ok) {
+              setBanner({ type: 'err', text: res.error || 'Não foi possível adicionar o feriado.' });
+              return;
+            }
             router.refresh();
           }}
           onToggleActive={async (id, next) => { await toggleHolidayActiveAction(id, next); router.refresh(); }}

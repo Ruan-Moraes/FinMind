@@ -52,15 +52,26 @@ export const createTransactionExecutor: AgentToolExecutor = {
 
   async executeAndVerify(userId, params) {
     const parsed = createTransactionToolSchema.parse(params);
+    if (parsed.type === 'TRANSFER') {
+      return {
+        ok: false,
+        verified: false,
+        summary: 'Transferências entre contas exigem seleção manual da conta de origem e destino.',
+        error: 'Transferências exigem conta de origem e destino.',
+      };
+    }
     const cents = Math.round(parsed.amountBRL * 100);
-    const sourceAccountId =
-      typeof params.resolvedAccountId === 'string' && params.resolvedAccountId
-        ? params.resolvedAccountId
-        : (await prisma.account.findFirst({ where: { userId, isArchived: false } }))?.id || null;
-    const categoryId =
-      typeof params.resolvedCategoryId === 'string' && params.resolvedCategoryId
-        ? params.resolvedCategoryId
-        : null;
+    const candidateAccountId = typeof params.resolvedAccountId === 'string' && params.resolvedAccountId ? params.resolvedAccountId : null;
+    const ownedAccount = candidateAccountId
+      ? await prisma.account.findFirst({ where: { id: candidateAccountId, userId, isArchived: false } })
+      : null;
+    const sourceAccountId = ownedAccount?.id || (await prisma.account.findFirst({ where: { userId, isArchived: false } }))?.id || null;
+
+    const candidateCategoryId = typeof params.resolvedCategoryId === 'string' && params.resolvedCategoryId ? params.resolvedCategoryId : null;
+    const ownedCategory = candidateCategoryId
+      ? await prisma.category.findFirst({ where: { id: candidateCategoryId, userId } })
+      : null;
+    const categoryId = ownedCategory?.id || null;
 
     const created = await prisma.transaction.create({
       data: {
@@ -105,30 +116,24 @@ export const updateUserPreferencesExecutor: AgentToolExecutor = {
 
     const beforePreview: Array<{ label: string; value: string }> = [];
     const afterPreview: Array<{ label: string; value: string }> = [];
+    const pushDiff = (label: string, before: string, after: string) => {
+      beforePreview.push({ label, value: before });
+      afterPreview.push({ label, value: after });
+    };
 
-    if (parsed.theme !== undefined) {
-      beforePreview.push({ label: 'Tema', value: current?.theme || 'DARK' });
-      afterPreview.push({ label: 'Tema', value: parsed.theme });
-    }
-    if (parsed.density !== undefined) {
-      beforePreview.push({ label: 'Densidade', value: current?.density || 'COMFORTABLE' });
-      afterPreview.push({ label: 'Densidade', value: parsed.density });
-    }
+    if (parsed.theme !== undefined) pushDiff('Tema', current?.theme || 'DARK', parsed.theme);
+    if (parsed.density !== undefined) pushDiff('Densidade', current?.density || 'COMFORTABLE', parsed.density);
     if (parsed.hideValuesByDefault !== undefined) {
-      beforePreview.push({ label: 'Modo Privacidade', value: current?.hideValuesByDefault ? 'Ativado' : 'Desativado' });
-      afterPreview.push({ label: 'Modo Privacidade', value: parsed.hideValuesByDefault ? 'Ativado' : 'Desativado' });
+      pushDiff('Modo Privacidade', current?.hideValuesByDefault ? 'Ativado' : 'Desativado', parsed.hideValuesByDefault ? 'Ativado' : 'Desativado');
     }
     if (parsed.fiscalMonthStartDay !== undefined) {
-      beforePreview.push({ label: 'Início do Ciclo Mensal', value: `Dia ${current?.fiscalMonthStartDay ?? 1}` });
-      afterPreview.push({ label: 'Início do Ciclo Mensal', value: `Dia ${parsed.fiscalMonthStartDay}` });
+      pushDiff('Início do Ciclo Mensal', `Dia ${current?.fiscalMonthStartDay ?? 1}`, `Dia ${parsed.fiscalMonthStartDay}`);
     }
     if (parsed.holidayState !== undefined) {
-      beforePreview.push({ label: 'Estado (UF)', value: current?.holidayState || 'Não definido' });
-      afterPreview.push({ label: 'Estado (UF)', value: parsed.holidayState?.toUpperCase() || 'Apenas Nacionais' });
+      pushDiff('Estado (UF)', current?.holidayState || 'Não definido', parsed.holidayState?.toUpperCase() || 'Apenas Nacionais');
     }
     if (parsed.holidayCity !== undefined) {
-      beforePreview.push({ label: 'Cidade', value: current?.holidayCity || 'Não definida' });
-      afterPreview.push({ label: 'Cidade', value: parsed.holidayCity || 'Não definida' });
+      pushDiff('Cidade', current?.holidayCity || 'Não definida', parsed.holidayCity || 'Não definida');
     }
 
     return {
@@ -147,8 +152,23 @@ export const updateUserPreferencesExecutor: AgentToolExecutor = {
       normalizedParams: parsed,
       postConfirmVisualSteps: [
         { id: 's1', action: 'OPEN_MODAL', modalType: 'SETTINGS', targetId: 'header.btn.settings', caption: 'Abrindo Configurações & Preferências' },
-        { id: 's2', action: 'HIGHLIGHT', targetId: 'modal.settings.btn.submit', caption: 'Salvando preferências no banco', pauseMs: 320 },
-        { id: 's3', action: 'CLOSE_MODAL', caption: 'Configurações atualizadas' },
+        {
+          id: 's2',
+          action: 'SCROLL_TO',
+          targetId:
+            parsed.holidayState !== undefined || parsed.holidayCity !== undefined
+              ? 'modal.settings.section.holidays'
+              : parsed.fiscalMonthStartDay !== undefined
+                ? 'modal.settings.fiscalDay'
+                : 'modal.settings.section.theme',
+          caption: 'Localizando seção de configurações',
+          tooltipTitle: 'Aplicando Preferências',
+          tooltipBody: `Atualizando ${afterPreview.map((p) => `${p.label}: ${p.value}`).join(' • ')}.`,
+          tone: 'emerald',
+          pauseMs: 850,
+        },
+        { id: 's3', action: 'HIGHLIGHT', targetId: 'modal.settings.btn.submit', caption: 'Salvando preferências no banco', pauseMs: 320 },
+        { id: 's4', action: 'CLOSE_MODAL', caption: 'Configurações atualizadas' },
       ],
       reversible: true,
     };

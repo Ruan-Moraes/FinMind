@@ -4,8 +4,7 @@ import type {
   SerializedValueForecastItem,
 } from '@/features/planning/domain/value-forecast-calculator';
 import type { HolidayRecord } from '@/features/planning/domain/business-days';
-import type { SsoSessionPayload } from '@/features/auth/sso';
-import type { AiProviderId, AiConnectionMode } from '@/features/ai-copilot/providers';
+import type { GlobalAiState } from '@/features/ai-copilot/domain/ai-provider-types';
 import type {
   AccountWithBalance,
   CreditCardWithSummary,
@@ -70,20 +69,8 @@ export interface WorkbenchProps {
     defaultAccountId: string | null;
     holidayState?: string | null;
     holidayCity?: string | null;
-    aiProvider: AiProviderId;
-    aiConnectionMode: AiConnectionMode;
-    openaiApiKey: string;
-    geminiApiKey: string;
-    claudeApiKey: string;
-    openaiModel: string;
-    geminiModel: string;
-    claudeModel: string;
   };
-  ssoState: {
-    authenticated: boolean;
-    session: SsoSessionPayload | null;
-  };
-  activeHeaderModelId: string;
+  initialAiState: GlobalAiState;
   aiReports: SerializedAiReport[];
   selectedMonth: number;
   selectedYear: number;

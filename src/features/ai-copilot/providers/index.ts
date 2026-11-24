@@ -1,13 +1,13 @@
 export {
-  AI_MODELS_CATALOG,
   type AiProviderId,
-  type AiConnectionMode,
   type AiModelId,
   type AiModelDescriptor,
   type SanityCheckValidationResult,
   type IntegrationDiagnosticCode,
   getAiModelDescriptor,
   findStrictAiModelDescriptor,
+  buildDynamicModelDescriptor,
+  inferProviderFromModelId,
   resolveDynamicModelRoute,
   validateModelIdentityResponse,
   classifyProviderError,
@@ -15,7 +15,7 @@ export {
   maskApiKey,
   SANITY_CHECK_PROMPT,
   DEFAULT_AI_MODEL_ID,
-} from "@/features/ai-copilot/models";
+} from '@/features/ai-copilot/models';
 
 export {
   type ExtractedStatementItem,
@@ -24,13 +24,13 @@ export {
   buildSubscriptionStatementPrompt,
   buildSubscriptionStatusPrompt,
   extractJsonFromAiResponse,
-} from "@/features/ai-copilot/providers/copilot-types-and-prompts";
+} from '@/features/ai-copilot/providers/copilot-types-and-prompts';
 
+export { executeModelSanityCheck } from '@/features/ai-copilot/providers/sanity-check-runner';
 export {
-  executeModelSanityCheck,
   callProviderApiText,
   callProviderApiJson,
-} from "@/features/ai-copilot/providers/provider-http-client";
+} from '@/features/ai-copilot/providers/provider-http-client';
 
-export { smartParseStatementLocally } from "@/features/ai-copilot/providers/local-statement-parser";
-export { generateSmartFinancialStatusAnalysis } from "@/features/ai-copilot/providers/local-financial-health";
+export { smartParseStatementLocally } from '@/features/ai-copilot/providers/local-statement-parser';
+export { generateSmartFinancialStatusAnalysis } from '@/features/ai-copilot/providers/local-financial-health';

@@ -5,7 +5,6 @@ import {
   isPublicAuthRequired,
   isSessionExplicitlyLoggedOut,
 } from '@/features/auth';
-import { getActiveSsoSession } from '@/features/auth/sso';
 import { loadSerializedDashboardData } from '@/features/analytics/services/dashboard-data-loader';
 import { FinMindWorkbench } from '@/features/dashboard/components/finmind-workbench';
 import { LoginView } from '@/features/auth/components/login-view';
@@ -38,14 +37,10 @@ export default async function HomePage({ searchParams }: PageProps) {
     return <LoginView defaultEmail={defaultEmail} />;
   }
 
-  const [user, ssoState] = await Promise.all([
-    ensurePersonalUserInitialized(),
-    getActiveSsoSession(),
-  ]);
+  const user = await ensurePersonalUserInitialized();
 
   const workbenchProps = await loadSerializedDashboardData({
     user,
-    ssoState,
     resolvedParams,
   });
 

@@ -48,6 +48,7 @@ export function StaticRuleFormModal() {
               type="submit"
               form="form-static-rule"
               isLoading={isSubmitting}
+              data-agent-id="modal.staticRule.btn.submit"
             >
               {editingRuleId ? 'Salvar Alterações' : 'Salvar Regra Fixa'}
             </Button>
@@ -96,6 +97,7 @@ export function StaticRuleFormModal() {
           </div>
           <FormField label="Descrição">
             <Input
+              data-agent-id="modal.staticRule.input.description"
               placeholder="Ex: Salário Fixo, Aluguel, Financiamento, Internet..."
               value={ruleDesc}
               onChange={(e) => setRuleDesc(e.target.value)}
@@ -169,6 +171,7 @@ export function StaticRuleFormModal() {
           <div className="space-y-4">
             <FormField label="Valor Mensal (R$)">
               <Input
+                data-agent-id="modal.staticRule.input.amount"
                 tabular
                 prefixText="R$"
                 placeholder="1500,00"
@@ -177,17 +180,19 @@ export function StaticRuleFormModal() {
                 required
               />
             </FormField>
-            <StaticRuleDueDateField
-              ruleDay={ruleDay}
-              setRuleDay={setRuleDay}
-              ruleDayType={ruleDayType}
-              setRuleDayType={setRuleDayType}
-              ruleIncludeSaturday={ruleIncludeSaturday}
-              setRuleIncludeSaturday={setRuleIncludeSaturday}
-              selectedMonth={selectedMonth}
-              selectedYear={selectedYear}
-              holidays={holidays}
-            />
+            <div data-agent-id="modal.staticRule.section.dueDate">
+              <StaticRuleDueDateField
+                ruleDay={ruleDay}
+                setRuleDay={setRuleDay}
+                ruleDayType={ruleDayType}
+                setRuleDayType={setRuleDayType}
+                ruleIncludeSaturday={ruleIncludeSaturday}
+                setRuleIncludeSaturday={setRuleIncludeSaturday}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                holidays={holidays}
+              />
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">

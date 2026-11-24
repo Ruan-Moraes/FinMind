@@ -41,6 +41,19 @@ export function AgentScreenshotCard({ image }: { image: CapturedAnnotatedImage }
     link.remove();
   };
 
+  React.useEffect(() => {
+    if (!zoomed) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setZoomed(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [zoomed]);
+
   return (
     <>
       <div className="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/70 overflow-hidden">

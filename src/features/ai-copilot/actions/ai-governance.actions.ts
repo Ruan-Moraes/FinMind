@@ -4,186 +4,177 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/shared/lib/prisma';
 import { requireAuthenticatedUser } from '@/features/auth';
 import { encryptSecret } from '@/features/auth/domain/secret-crypto';
-import { type AiProviderId, type AiConnectionMode, type SanityCheckValidationResult, executeModelSanityCheck, getAiModelDescriptor, isAuthenticApiKey, DEFAULT_AI_MODEL_ID } from '@/features/ai-copilot/providers';
 import {
-  getActiveSsoSession,
-  issueSsoSessionCookie,
-  revokeSsoSessionCookie,
-  type SsoIdentityProvider,
-  type SsoSessionPayload,
-} from '@/features/auth/sso';
+  PROVIDER_STATIC_META,
+  type AiProviderId,
+  type ProviderIntegrationState,
+} from '@/features/ai-copilot/domain/ai-provider-types';
+import { isAuthenticApiKey } from '@/features/ai-copilot/models';
 import {
   executeContextualFinancialAssistant,
   type AssistantStructuredResponse,
 } from '@/features/ai-copilot/assistant';
-
-export async function authenticateSsoAction(idpProvider: SsoIdentityProvider = 'ENTERPRISE_OIDC'): Promise<{
-  ok: boolean;
-  session: SsoSessionPayload;
-  tokenPreview: string;
-}> {
-  const user = await requireAuthenticatedUser();
-  const { token, session } = await issueSsoSessionCookie({
-    userId: user.id,
-    email: user.email,
-    name: user.name,
-    idpProvider,
-  });
-
-  revalidatePath('/');
-  return {
-    ok: true,
-    session,
-    tokenPreview: `${token.slice(0, 18)}...${token.slice(-10)}`,
-  };
-}
+import { resolveUserProviderCredentials } from '@/features/ai-copilot/services/ai-credentials-service';
+import { invalidateProviderModelsCache } from '@/features/ai-copilot/services/official-models-discovery';
+import { buildProviderIntegrationState } from '@/features/ai-copilot/services/ai-provider-state-service';
 
 /**
- * Camada SSO: Revogar Sessão Single Sign-On (bloqueando imediatamente qualquer chamada aos LLMs).
+ * Salva (criptografada) a chave de API de um provedor específico, invalida cache,
+ * valida imediatamente na API oficial de modelos e retorna o estado autoritativo atualizado.
  */
-export async function revokeSsoAction(): Promise<{ ok: boolean }> {
-  await revokeSsoSessionCookie();
-  revalidatePath('/');
-  return { ok: true };
-}
-
-/**
- * Seletor de Modelos via Input HEADER + Sanity Check ("Qual é o seu modelo?").
- * 1. Verifica a credencial real ativa antes de liberar a requisição.
- * 2. Injeção dinâmica de credenciais e rota para o modelo selecionado.
- * 3. Disparo interno da pergunta "Qual é o seu modelo?" e validação de identidade.
- */
-export async function selectHeaderAiModelAndRunSanityCheckAction(modelId: string): Promise<{
-  ok: boolean;
-  ssoAuthenticated: boolean;
-  sanityCheck?: SanityCheckValidationResult;
-  error?: string;
-}> {
+export async function saveProviderCredentialsAction(data: {
+  provider: AiProviderId;
+  apiKey: string;
+  modelId?: string;
+  activateProvider?: boolean;
+}): Promise<
+  | { ok: true; state: ProviderIntegrationState; activeProvider: AiProviderId }
+  | { ok: false; error: string }
+> {
   const user = await requireAuthenticatedUser();
-  const ssoState = await getActiveSsoSession();
-  const descriptor = getAiModelDescriptor(modelId);
+  const { provider } = data;
+  const meta = PROVIDER_STATIC_META[provider];
+  const incomingKey = data.apiKey.trim();
 
-  await prisma.userSettings.upsert({
-    where: { userId: user.id },
-    create: {
+  if (!isAuthenticApiKey(incomingKey)) {
+    return {
+      ok: false,
+      error: `Informe uma chave de API válida para ${meta.name} (ex.: ${meta.keyPlaceholder}).`,
+    };
+  }
+
+  const encrypted = encryptSecret(incomingKey);
+  const cleanModel = data.modelId?.trim();
+
+  try {
+    await prisma.userSettings.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        aiProvider: data.activateProvider === false ? 'OPENAI' : provider,
+        aiConnectionMode: 'API_KEY',
+        [meta.dbKeyField]: encrypted,
+        ...(cleanModel ? { [meta.dbModelField]: cleanModel } : {}),
+      },
+      update: {
+        aiConnectionMode: 'API_KEY',
+        ...(data.activateProvider !== false ? { aiProvider: provider } : {}),
+        [meta.dbKeyField]: encrypted,
+        ...(cleanModel !== undefined ? { [meta.dbModelField]: cleanModel } : {}),
+      },
+    });
+
+    invalidateProviderModelsCache(user.id, provider);
+    const bundle = await resolveUserProviderCredentials(user.id);
+    const state = await buildProviderIntegrationState({
       userId: user.id,
-      aiProvider: descriptor.provider,
-      openaiModel: descriptor.provider === 'OPENAI' ? descriptor.id : DEFAULT_AI_MODEL_ID,
-      geminiModel: descriptor.provider === 'GEMINI' ? descriptor.id : 'gemini-2.0-flash',
-      claudeModel:
-        descriptor.provider === 'CLAUDE' ? descriptor.id : 'claude-3-5-sonnet-latest',
-    },
-    update: {
-      aiProvider: descriptor.provider,
-      ...(descriptor.provider === 'OPENAI' && { openaiModel: descriptor.id }),
-      ...(descriptor.provider === 'GEMINI' && { geminiModel: descriptor.id }),
-      ...(descriptor.provider === 'CLAUDE' && { claudeModel: descriptor.id }),
-    },
-  });
+      cred: bundle.providers[provider],
+      validateLive: true,
+      forceRefresh: true,
+    });
 
-  const sanityCheck = await executeModelSanityCheck({
-    modelId: descriptor.id,
-    ssoToken: ssoState.token || '',
-    userKeys: {
-      openaiApiKey: user.settings?.openaiApiKey,
-      geminiApiKey: user.settings?.geminiApiKey,
-      claudeApiKey: user.settings?.claudeApiKey,
-    },
-  });
+    // Se ainda não havia modelo salvo para este provedor e a API retornou modelos compatíveis,
+    // NÃO substitui um modelo já escolhido; apenas preenche quando o campo estava vazio.
+    if (!state.selectedModelId && state.models.length > 0) {
+      const firstCompatible = state.models.find((m) => m.compatibleWithApp) || state.models[0];
+      if (firstCompatible) {
+        await prisma.userSettings.update({
+          where: { userId: user.id },
+          data: { [meta.dbModelField]: firstCompatible.id },
+        });
+        state.selectedModelId = firstCompatible.id;
+        state.selectedModelAvailable = true;
+      }
+    }
 
-  revalidatePath('/');
-  return {
-    ok: sanityCheck.passed,
-    ssoAuthenticated: sanityCheck.passed,
-    sanityCheck,
-    error: sanityCheck.error || undefined,
-  };
+    revalidatePath('/');
+    return { ok: true, state, activeProvider: bundle.activeProvider };
+  } catch (err) {
+    console.error('[saveProviderCredentialsAction]', err);
+    return { ok: false, error: 'Não foi possível salvar a credencial do provedor.' };
+  }
 }
 
 /**
- * RF-27: Salvar configurações de conexão com IA no banco (protegendo chaves salvas contra sobrescrita por máscaras).
+ * Remove a chave de API armazenada para um provedor, invalida cache e retorna o novo estado.
  */
-export async function updateAiSettingsAction(data: {
-  aiProvider: AiProviderId;
-  aiConnectionMode: AiConnectionMode;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
-  claudeApiKey?: string;
-  openaiModel?: string;
-  geminiModel?: string;
-  claudeModel?: string;
-}) {
+export async function removeProviderCredentialsAction(data: {
+  provider: AiProviderId;
+}): Promise<
+  | { ok: true; state: ProviderIntegrationState }
+  | { ok: false; error: string }
+> {
   const user = await requireAuthenticatedUser();
+  const meta = PROVIDER_STATIC_META[data.provider];
 
-  const resolveKeyUpdate = (incoming: string | undefined, existing: string | null | undefined) => {
-    if (incoming === undefined) return existing ? encryptSecret(existing) : null;
-    const trimmed = incoming.trim();
-    if (trimmed === '') return null;
-    if (isAuthenticApiKey(trimmed)) return encryptSecret(trimmed);
-    // Se veio mascarada (ex: "sk-proj...1234"), preserva a chave existente no banco
-    return existing ? encryptSecret(existing) : null;
-  };
+  try {
+    await prisma.userSettings.updateMany({
+      where: { userId: user.id },
+      data: { [meta.dbKeyField]: null, aiConnectionMode: 'API_KEY' },
+    });
+    invalidateProviderModelsCache(user.id, data.provider);
 
-  const nextOpenaiKey = resolveKeyUpdate(data.openaiApiKey, user.settings?.openaiApiKey);
-  const nextGeminiKey = resolveKeyUpdate(data.geminiApiKey, user.settings?.geminiApiKey);
-  const nextClaudeKey = resolveKeyUpdate(data.claudeApiKey, user.settings?.claudeApiKey);
-
-  const updated = await prisma.userSettings.upsert({
-    where: { userId: user.id },
-    create: {
+    const bundle = await resolveUserProviderCredentials(user.id);
+    const state = await buildProviderIntegrationState({
       userId: user.id,
-      aiProvider: data.aiProvider,
-      aiConnectionMode: data.aiConnectionMode,
-      openaiApiKey: nextOpenaiKey,
-      geminiApiKey: nextGeminiKey,
-      claudeApiKey: nextClaudeKey,
-      openaiModel: getAiModelDescriptor(data.openaiModel || 'gpt-4o-mini').id,
-      geminiModel: getAiModelDescriptor(data.geminiModel || 'gemini-2.0-flash').id,
-      claudeModel: getAiModelDescriptor(data.claudeModel || 'claude-3-5-sonnet-latest').id,
-    },
-    update: {
-      aiProvider: data.aiProvider,
-      aiConnectionMode: data.aiConnectionMode,
-      openaiApiKey: nextOpenaiKey,
-      geminiApiKey: nextGeminiKey,
-      claudeApiKey: nextClaudeKey,
-      ...(data.openaiModel && { openaiModel: getAiModelDescriptor(data.openaiModel).id }),
-      ...(data.geminiModel && { geminiModel: getAiModelDescriptor(data.geminiModel).id }),
-      ...(data.claudeModel && { claudeModel: getAiModelDescriptor(data.claudeModel).id }),
-    },
-  });
+      cred: bundle.providers[data.provider],
+      validateLive: Boolean(bundle.providers[data.provider].effectiveKey),
+      forceRefresh: true,
+    });
 
-  revalidatePath('/');
-  return { ok: true, settings: updated };
+    revalidatePath('/');
+    return { ok: true, state };
+  } catch (err) {
+    console.error('[removeProviderCredentialsAction]', err);
+    return { ok: false, error: 'Não foi possível remover a credencial do provedor.' };
+  }
 }
 
 /**
- * RF-28: Analisa um extrato financeiro (via API Oficial quando em API_QUOTA ou via Parser Local Determinístico quando em SUBSCRIPTION).
- * Nunca substitui silenciosamente uma falha de API por resultado local fingindo ser IA.
+ * Seleciona o provedor ativo e/ou o modelo de um provedor específico (sem disparar inferência paga).
  */
+export async function selectActiveAiModelAction(data: {
+  provider: AiProviderId;
+  modelId: string;
+}): Promise<{ ok: true; provider: AiProviderId; modelId: string } | { ok: false; error: string }> {
+  const user = await requireAuthenticatedUser();
+  const meta = PROVIDER_STATIC_META[data.provider];
+  const cleanModel = data.modelId.trim();
 
-/**
- * Seção 10: Action do Assistente Financeiro Contextualizado (RAG + Cálculos Determinísticos).
- */
+  try {
+    await prisma.userSettings.upsert({
+      where: { userId: user.id },
+      create: {
+        userId: user.id,
+        aiProvider: data.provider,
+        aiConnectionMode: 'API_KEY',
+        [meta.dbModelField]: cleanModel,
+      },
+      update: {
+        aiProvider: data.provider,
+        aiConnectionMode: 'API_KEY',
+        ...(cleanModel ? { [meta.dbModelField]: cleanModel } : {}),
+      },
+    });
+    revalidatePath('/');
+    return { ok: true, provider: data.provider, modelId: cleanModel };
+  } catch (err) {
+    console.error('[selectActiveAiModelAction]', err);
+    return { ok: false, error: 'Não foi possível salvar a seleção do modelo.' };
+  }
+}
+
 export async function askFinancialAssistantAction(data: {
   question: string;
   month?: number;
   year?: number;
   requireLiveLlm?: boolean;
-}): Promise<{
-  ok: boolean;
-  response?: AssistantStructuredResponse;
-  error?: string;
-}> {
+}): Promise<{ ok: boolean; response?: AssistantStructuredResponse; error?: string }> {
   try {
     const user = await requireAuthenticatedUser();
     if (!data.question || !data.question.trim()) {
-      return {
-        ok: false,
-        error: 'Digite uma pergunta financeira para consultar o assistente.',
-      };
+      return { ok: false, error: 'Digite uma pergunta financeira para consultar o assistente.' };
     }
-
     const response = await executeContextualFinancialAssistant({
       userId: user.id,
       question: data.question.trim(),
@@ -191,18 +182,11 @@ export async function askFinancialAssistantAction(data: {
       referenceYear: data.year,
       requireLiveLlm: data.requireLiveLlm,
     });
-
-    return {
-      ok: true,
-      response,
-    };
+    return { ok: true, response };
   } catch (err) {
     return {
       ok: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : 'Erro ao processar consulta no assistente financeiro.',
+      error: err instanceof Error ? err.message : 'Erro ao processar consulta no assistente financeiro.',
     };
   }
 }

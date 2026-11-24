@@ -25,8 +25,56 @@ export interface AiProviderAdapter {
   extractTextFromResponse(data: Record<string, unknown>): string;
 }
 
-const isOpenAiReasoningModel = (upstreamModel: string) =>
-  upstreamModel.startsWith('o1') || upstreamModel.startsWith('o3');
+export const isOpenAiReasoningOrNextGenModel = (upstreamModel: string) =>
+  /^(o\d|gpt-[5-9]|gpt-\d{2})/i.test(upstreamModel.trim());
+
+/**
+ * Ajusta o payload da OpenAI caso um modelo futuro/específico rejeite algum parâmetro opcional
+ * (ex.: `temperature`, `max_tokens`, `response_format` ou role `developer`).
+ */
+export function adaptOpenAiBodyForUnsupportedParam(
+  body: Record<string, unknown>,
+  errorMessage: string
+): Record<string, unknown> | null {
+  const lower = errorMessage.toLowerCase();
+  if (!lower.includes('unsupported') && !lower.includes('not supported')) return null;
+
+  const next: Record<string, unknown> = { ...body };
+  let changed = false;
+
+  if (lower.includes('reasoning_effort')) {
+    if (lower.includes('none') && next.reasoning_effort !== 'none') {
+      next.reasoning_effort = 'none';
+      changed = true;
+    } else if ('reasoning_effort' in next) {
+      delete next.reasoning_effort;
+      changed = true;
+    }
+  }
+  if (lower.includes('max_tokens') && 'max_tokens' in next) {
+    next.max_completion_tokens = next.max_tokens;
+    delete next.max_tokens;
+    changed = true;
+  }
+  if (lower.includes('temperature') && 'temperature' in next) {
+    delete next.temperature;
+    changed = true;
+  }
+  if (lower.includes('response_format') && 'response_format' in next) {
+    delete next.response_format;
+    changed = true;
+  }
+  if (lower.includes('developer') && Array.isArray(next.messages)) {
+    next.messages = next.messages.map((m) =>
+      m && typeof m === 'object' && (m as { role?: string }).role === 'developer'
+        ? { ...(m as Record<string, unknown>), role: 'system' }
+        : m
+    );
+    changed = true;
+  }
+
+  return changed ? next : null;
+}
 
 const openaiAdapter: AiProviderAdapter = {
   id: 'OPENAI',
@@ -42,35 +90,33 @@ const openaiAdapter: AiProviderAdapter = {
     return { endpointUrl: model.endpointUrl, headers };
   },
   buildTextRequestBody({ model, systemInstruction, userPrompt, maxTokens }) {
-    const reasoning = isOpenAiReasoningModel(model.upstreamApiModel);
+    const modern = isOpenAiReasoningOrNextGenModel(model.upstreamApiModel);
     const body: Record<string, unknown> = {
       model: model.upstreamApiModel,
       messages: [
-        { role: reasoning ? 'developer' : 'system', content: systemInstruction },
+        { role: modern ? 'developer' : 'system', content: systemInstruction },
         { role: 'user', content: userPrompt },
       ],
+      max_completion_tokens: maxTokens,
     };
-    if (reasoning) {
-      body.max_completion_tokens = maxTokens;
-    } else {
+    if (!modern) {
       body.temperature = 0.2;
-      body.max_tokens = maxTokens;
     }
     return body;
   },
   buildJsonRequestBody({ model, prompt }) {
-    const reasoning = isOpenAiReasoningModel(model.upstreamApiModel);
+    const modern = isOpenAiReasoningOrNextGenModel(model.upstreamApiModel);
     const body: Record<string, unknown> = {
       model: model.upstreamApiModel,
       messages: [
         {
-          role: reasoning ? 'developer' : 'system',
+          role: modern ? 'developer' : 'system',
           content: 'Você é um analista financeiro preciso. Responda exclusivamente em JSON válido.',
         },
         { role: 'user', content: prompt },
       ],
     };
-    if (!reasoning) {
+    if (!modern) {
       body.temperature = 0.1;
       body.response_format = { type: 'json_object' };
     }
@@ -89,13 +135,14 @@ const geminiAdapter: AiProviderAdapter = {
   dbModelField: 'geminiModel',
   displayGroupLabel: 'Google Gemini',
   buildEndpointAndHeaders({ model, effectiveApiKey, hasExternalApiKey, baseHeaders }) {
-    const dynamicEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    const endpointUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       model.upstreamApiModel
     )}:generateContent`;
-    const endpointUrl = hasExternalApiKey
-      ? `${dynamicEndpoint}?key=${encodeURIComponent(effectiveApiKey)}`
-      : dynamicEndpoint;
-    return { endpointUrl, headers: { ...baseHeaders } };
+    const headers: Record<string, string> = { ...baseHeaders };
+    if (hasExternalApiKey) {
+      headers['x-goog-api-key'] = effectiveApiKey;
+    }
+    return { endpointUrl, headers };
   },
   buildTextRequestBody({ systemInstruction, userPrompt, maxTokens }) {
     return {

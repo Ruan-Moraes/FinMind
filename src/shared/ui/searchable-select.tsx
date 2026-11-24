@@ -60,7 +60,7 @@ const normalizeSearch = (str: string) =>
 export type SearchableSelectProps = React.SelectHTMLAttributes<HTMLSelectElement>;
 
 export const SearchableSelect = React.forwardRef<HTMLSelectElement, SearchableSelectProps>(
-  ({ className = '', children, value, defaultValue, onChange, disabled, id, name, 'aria-label': ariaLabel }, ref) => {
+  ({ className = '', children, value, defaultValue, onChange, disabled, id, name, required, 'aria-label': ariaLabel, 'aria-describedby': ariaDescribedBy, ...rest }, ref) => {
     const options = React.useMemo(() => extractOptionsFromChildren(children), [children]);
     const isControlled = value !== undefined;
     const [internalValue, setInternalValue] = React.useState<string>(
@@ -92,7 +92,8 @@ export const SearchableSelect = React.forwardRef<HTMLSelectElement, SearchableSe
 
     React.useEffect(() => {
       if (!isOpen) return;
-      setHighlightedIndex(0);
+      const firstEnabled = filteredOptions.findIndex((o) => !o.disabled);
+      setHighlightedIndex(firstEnabled >= 0 ? firstEnabled : 0);
       const timer = window.setTimeout(() => searchInputRef.current?.focus(), 15);
       const handleClickOutside = (e: MouseEvent) => {
         const target = e.target as Node;
@@ -103,12 +104,33 @@ export const SearchableSelect = React.forwardRef<HTMLSelectElement, SearchableSe
           setQuery('');
         }
       };
+      const handleEscapeCapture = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          setIsOpen(false);
+          setQuery('');
+          triggerRef.current?.focus();
+        }
+      };
       document.addEventListener('mousedown', handleClickOutside);
+      window.addEventListener('keydown', handleEscapeCapture, true);
       return () => {
         window.clearTimeout(timer);
         document.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('keydown', handleEscapeCapture, true);
       };
-    }, [isOpen]);
+    }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const findNextEnabledIndex = (from: number, dir: 1 | -1) => {
+      if (filteredOptions.length === 0) return 0;
+      let idx = from + dir;
+      while (idx >= 0 && idx < filteredOptions.length) {
+        if (!filteredOptions[idx].disabled) return idx;
+        idx += dir;
+      }
+      return Math.max(0, Math.min(filteredOptions.length - 1, from));
+    };
 
     const handleSelect = (opt: ParsedSelectOption) => {
       if (opt.disabled) return;
@@ -131,20 +153,42 @@ export const SearchableSelect = React.forwardRef<HTMLSelectElement, SearchableSe
         setQuery('');
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setHighlightedIndex((i) => Math.min(filteredOptions.length - 1, i + 1));
+        if (!isOpen && !disabled) {
+          setIsOpen(true);
+          return;
+        }
+        if (filteredOptions.length > 0) {
+          setHighlightedIndex((i) => findNextEnabledIndex(i, 1));
+        }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setHighlightedIndex((i) => Math.max(0, i - 1));
+        if (!isOpen && !disabled) {
+          setIsOpen(true);
+          return;
+        }
+        if (filteredOptions.length > 0) {
+          setHighlightedIndex((i) => findNextEnabledIndex(i, -1));
+        }
       } else if (e.key === 'Enter' && isOpen) {
         e.preventDefault();
         const target = filteredOptions[highlightedIndex];
-        if (target) handleSelect(target);
+        if (target && !target.disabled) handleSelect(target);
       }
     };
 
     return (
       <div ref={containerRef} className="relative w-full" onKeyDown={handleKeyDown}>
-        <select ref={ref} value={currentValue} onChange={onChange} className="sr-only" tabIndex={-1} aria-hidden="true">
+        <select
+          ref={ref}
+          value={currentValue}
+          onChange={onChange}
+          required={required}
+          disabled={disabled}
+          className="sr-only"
+          tabIndex={-1}
+          aria-hidden="true"
+          {...rest}
+        >
           {children}
         </select>
         {name && <input type="hidden" name={name} value={currentValue} />}
@@ -158,6 +202,7 @@ export const SearchableSelect = React.forwardRef<HTMLSelectElement, SearchableSe
           aria-expanded={isOpen}
           aria-haspopup="listbox"
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
           disabled={disabled}
           onClick={() => !disabled && setIsOpen((v) => !v)}
           className={`h-11 w-full flex items-center justify-between gap-2 rounded-xl border border-slate-200/90 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-950/90 pl-3.5 pr-3 text-sm font-medium text-left text-slate-900 dark:text-zinc-100 hover:border-slate-300 dark:hover:border-zinc-700 focus:bg-white dark:focus:bg-zinc-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/25 focus:border-indigo-500 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${className}`}

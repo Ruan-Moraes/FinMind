@@ -4,16 +4,18 @@ import {
   resolveDynamicModelRoute,
   type ResolvedModelRouteConfig,
 } from '@/features/ai-copilot/models';
-import { AI_PROVIDER_ADAPTERS } from '@/features/ai-copilot/providers/provider-adapters';
-
-export { executeModelSanityCheck } from '@/features/ai-copilot/providers/sanity-check-runner';
+import {
+  adaptOpenAiBodyForUnsupportedParam,
+  AI_PROVIDER_ADAPTERS,
+} from '@/features/ai-copilot/providers/provider-adapters';
 
 async function executeProviderHttpRequest(params: {
   routeConfig: ResolvedModelRouteConfig;
   body: Record<string, unknown>;
   timeoutMs: number;
+  allowParamRetry?: boolean;
 }): Promise<string> {
-  const { routeConfig, body, timeoutMs } = params;
+  const { routeConfig, body, timeoutMs, allowParamRetry = true } = params;
   const { provider, endpointUrl, headers, model } = routeConfig;
   const adapter = AI_PROVIDER_ADAPTERS[provider];
 
@@ -34,6 +36,18 @@ async function executeProviderHttpRequest(params: {
         errBody?.error?.message ||
         res.statusText ||
         `Credencial ou modelo recusado por ${adapter.displayGroupLabel}`;
+      if (allowParamRetry && res.status === 400 && provider === 'OPENAI') {
+        const adapted = adaptOpenAiBodyForUnsupportedParam(body, detail);
+        if (adapted) {
+          clearTimeout(timeout);
+          return executeProviderHttpRequest({
+            routeConfig,
+            body: adapted,
+            timeoutMs,
+            allowParamRetry: false,
+          });
+        }
+      }
       throw new Error(`${adapter.displayGroupLabel} API HTTP ${res.status}: ${detail}`);
     }
 
@@ -89,16 +103,15 @@ export async function callProviderApiJson(params: {
   apiKey?: string | null;
   model: string;
   prompt: string;
-  ssoToken?: string;
 }): Promise<string> {
-  const { provider, apiKey, model, prompt, ssoToken } = params;
-  const descriptor = getAiModelDescriptor(model);
+  const { provider, apiKey, model, prompt } = params;
+  const descriptor = getAiModelDescriptor(model, provider);
   const adapter = AI_PROVIDER_ADAPTERS[provider];
 
   const routeConfig = resolveDynamicModelRoute(
     descriptor.id,
     { [adapter.dbKeyField]: apiKey },
-    ssoToken
+    provider
   );
 
   if (!routeConfig.hasExternalApiKey) {

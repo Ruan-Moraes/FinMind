@@ -1,7 +1,7 @@
 import { AI_PROVIDER_META, type AiProviderId } from '@/features/ai-copilot/providers';
 
 export type ScoreFilter = 'ALL' | 'HEALTHY' | 'ATTENTION' | 'CRITICAL';
-export type ProviderFilter = 'ALL' | 'OPENAI' | 'GEMINI' | 'CLAUDE';
+export type ProviderFilter = 'ALL' | 'OPENAI' | 'GEMINI' | 'CLAUDE' | 'MOTOR_DETERMINISTICO';
 export type SortOrder = 'NEWEST' | 'OLDEST' | 'SCORE_DESC' | 'SCORE_ASC';
 
 export interface HealthReportsFilterState {

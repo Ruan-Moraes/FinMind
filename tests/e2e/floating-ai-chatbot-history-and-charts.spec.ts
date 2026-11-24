@@ -15,14 +15,20 @@ test.describe('E2E: Chatbot Flutuante IA — RAG, Gráficos Dinâmicos e Histór
     const question = `Mostre um gráfico dos meus gastos e metas (${uniqueMarker})`;
 
     // 2. Enviar pergunta
-    const ragInput = chatbot.locator('form input');
+    const ragInput = chatbot.locator('form textarea');
     await ragInput.fill(question);
     await ragInput.press('Enter');
 
-    await expect(chatbot).toContainText(
-      /Ver Fatos Históricos|Patrimônio Líquido|Não há dados financeiros/i,
-      { timeout: 20000 }
-    );
+    await expect(
+      chatbot
+        .locator('[data-agent-block]')
+        .or(
+          chatbot.getByText(
+            /Detalhamento do Progresso das Metas|Patrimônio Líquido|Despesas por Categoria|Gastos por categoria|Progresso das metas|Não há dados financeiros/i
+          )
+        )
+        .first()
+    ).toBeVisible({ timeout: 25000 });
 
     // 3. Iniciar nova conversa e consultar a anterior no Histórico persistido
     await chatbot.getByRole('button', { name: 'Nova conversa' }).click();

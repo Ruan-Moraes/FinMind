@@ -1,9 +1,9 @@
 ---
 docId: settings-holidays-and-backup
 module: settings
-version: 1.0.0
+version: 1.1.0
 screens: ["modal:SETTINGS", "modal:HOLIDAYS", "modal:RESET"]
-relatedTools: ["open_settings", "update_user_preferences", "sync_holidays", "guide_feature_workflow"]
+relatedTools: ["open_settings", "update_user_preferences", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["configuracoes", "preferencias", "estado", "cidade", "feriados", "dias uteis", "ciclo mensal", "backup", "snapshot", "exportar", "reset"]
 ---
 

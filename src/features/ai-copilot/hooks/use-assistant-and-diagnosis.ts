@@ -2,15 +2,13 @@
 
 import * as React from 'react';
 import { runAiFinancialStatusAnalysisAction } from '@/features/ai-copilot/actions/ai-status-reports.actions';
-import type { AiConnectionMode } from '@/features/ai-copilot/providers';
 import type { AiFinancialHubProps } from '@/features/ai-copilot/components/ai-financial-hub';
 
 export function useFinancialStatusDiagnosis(params: {
-  connectionMode: AiConnectionMode;
   financialContext: AiFinancialHubProps['financialContext'];
+  hasConfiguredProvider: boolean;
 }) {
-  const { connectionMode, financialContext } = params;
-  const [pastedStatusResponse, setPastedStatusResponse] = React.useState('');
+  const { financialContext, hasConfiguredProvider } = params;
   const [isRunningAnalysis, setIsRunningAnalysis] = React.useState(false);
   const [statusAnalysisError, setStatusAnalysisError] = React.useState<string | null>(null);
 
@@ -19,17 +17,14 @@ export function useFinancialStatusDiagnosis(params: {
     setStatusAnalysisError(null);
     try {
       const res = await runAiFinancialStatusAnalysisAction({
-        pastedSubscriptionResponse: pastedStatusResponse,
         context: financialContext,
-        allowLocalFallback: connectionMode === 'SUBSCRIPTION',
+        allowLocalFallback: !hasConfiguredProvider,
       });
       if (!res.ok) {
         setStatusAnalysisError(
           res.error ||
             'Falha ao consultar a IA para gerar o diagnóstico. Verifique a chave de API do provedor selecionado.'
         );
-      } else {
-        setPastedStatusResponse('');
       }
     } finally {
       setIsRunningAnalysis(false);
@@ -37,8 +32,6 @@ export function useFinancialStatusDiagnosis(params: {
   };
 
   return {
-    pastedStatusResponse,
-    setPastedStatusResponse,
     isRunningAnalysis,
     statusAnalysisError,
     handleGenerateStatusReport,
