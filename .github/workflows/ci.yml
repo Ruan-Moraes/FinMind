@@ -1,0 +1,54 @@
+name: CI — FinMind Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: file:./dev.db
+      AUTH_SECRET: ci-ephemeral-auth-secret-key-for-verification-only
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client & Sync SQLite Schema
+        run: pnpm exec prisma generate && pnpm exec prisma db push
+
+      - name: TypeScript Typecheck
+        run: pnpm exec tsc --noEmit
+
+      - name: ESLint (Strict)
+        run: pnpm lint
+
+      - name: Unit & Integration Tests (Vitest)
+        run: pnpm test
+
+      - name: Production Build (Next.js)
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-End Tests (Playwright)
+        run: pnpm test:e2e

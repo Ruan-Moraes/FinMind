@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "kbVersion": "2026.11.1",
+  "description": "Base de conhecimento funcional modular e versionada do FinMind para o Agente IA Autônomo",
+  "documents": [
+    "00-sistema-e-regras-globais.md",
+    "01-visao-geral-e-navegacao.md",
+    "02-extrato-e-lancamentos.md",
+    "03-metas-e-custos-estaticos.md",
+    "04-previsao-de-valor.md",
+    "05-contas-e-cartoes.md",
+    "06-comparativo-entre-meses.md",
+    "07-copiloto-ia-e-conciliacao.md",
+    "08-configuracoes-feriados-backup.md",
+    "09-erros-limites-e-recuperacao.md"
+  ]
+}
