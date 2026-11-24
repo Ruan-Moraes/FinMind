@@ -21,6 +21,7 @@ export interface CreditCardWithSummary {
   currentInvoiceInCents: number;
   currentInvoiceStatus: string;
   currentInvoiceId?: string;
+  linkedStaticRulesInCents?: number;
 }
 
 export interface PortfolioGoalProgress {

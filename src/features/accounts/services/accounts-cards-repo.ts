@@ -80,6 +80,9 @@ export async function getCreditCardsWithSummary(
           transactions: true,
         },
       },
+      recurrenceRules: {
+        where: { isActive: true, type: 'EXPENSE' },
+      },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -89,6 +92,7 @@ export async function getCreditCardsWithSummary(
     let currentInvoiceInCents = 0;
     let currentInvoiceStatus = 'OPEN';
     let currentInvoiceId: string | undefined;
+    const materializedRuleIds = new Set<string>();
 
     for (const inv of card.invoices) {
       const invSum = inv.transactions.reduce((acc, t) => acc + t.amountInCents, 0);
@@ -99,8 +103,20 @@ export async function getCreditCardsWithSummary(
         currentInvoiceInCents = invSum;
         currentInvoiceStatus = inv.status;
         currentInvoiceId = inv.id;
+        for (const t of inv.transactions) {
+          if (t.recurrenceRuleId) materializedRuleIds.add(t.recurrenceRuleId);
+        }
       }
     }
+
+    const effectiveCardRules = resolveEffectiveRulesForMonth(card.recurrenceRules, year, month);
+    const linkedStaticRulesInCents =
+      currentInvoiceStatus !== 'PAID'
+        ? effectiveCardRules
+            .filter((r) => !materializedRuleIds.has(r.id))
+            .reduce((acc, r) => acc + r.amountInCents, 0)
+        : 0;
+    usedLimitInCents += linkedStaticRulesInCents;
 
     return {
       id: card.id,
@@ -115,6 +131,7 @@ export async function getCreditCardsWithSummary(
       currentInvoiceInCents,
       currentInvoiceStatus,
       currentInvoiceId,
+      linkedStaticRulesInCents,
     };
   });
 }

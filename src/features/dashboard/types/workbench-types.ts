@@ -129,6 +129,8 @@ export interface WorkbenchProps {
     categoryIcon?: string | null;
     accountId: string | null;
     accountName: string | null;
+    creditCardId?: string | null;
+    creditCardName?: string | null;
   }>;
   transactions: SerializedTransaction[];
   importBatches?: SerializedImportBatch[];

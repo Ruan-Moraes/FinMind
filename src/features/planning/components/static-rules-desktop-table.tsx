@@ -129,7 +129,12 @@ export function StaticRulesDesktopTable({ togglingId, onToggleSkip }: StaticRule
                   dueYear: selectedYear, dueMonth: selectedMonth, dueDay,
                 });
                 const shortDueDate = `${String(dueDay).padStart(2, '0')}/${String(selectedMonth).padStart(2, '0')}`;
-                const subtitle = [rule.categoryName, rule.accountName].filter(Boolean).join(' • ');
+                const subtitle = [
+                  rule.categoryName,
+                  rule.creditCardName ? `Cartão ${rule.creditCardName}` : rule.accountName,
+                ]
+                  .filter(Boolean)
+                  .join(' • ');
 
                 return (
                   <tr

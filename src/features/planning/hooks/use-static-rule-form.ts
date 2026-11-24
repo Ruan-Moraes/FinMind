@@ -23,6 +23,7 @@ export function useStaticRuleForm(params: {
   const [ruleIncludeSaturday, setRuleIncludeSaturday] = React.useState(false);
   const [ruleCatId, setRuleCatId] = React.useState(defaultCategoryId);
   const [ruleAccId, setRuleAccId] = React.useState(defaultAccountId);
+  const [ruleCardId, setRuleCardId] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   React.useEffect(() => {
@@ -37,6 +38,7 @@ export function useStaticRuleForm(params: {
       setRuleIncludeSaturday(Boolean(editingRule.includeSaturday));
       setRuleCatId(editingRule.categoryId || '');
       setRuleAccId(editingRule.accountId || defaultAccountId);
+      setRuleCardId(editingRule.creditCardId || '');
     } else {
       setRuleDesc('');
       setRuleType(presetType || 'EXPENSE');
@@ -47,6 +49,7 @@ export function useStaticRuleForm(params: {
       setRuleIncludeSaturday(false);
       setRuleCatId(defaultCategoryId);
       setRuleAccId(defaultAccountId);
+      setRuleCardId('');
     }
   }, [isOpen, editingRule, presetType, defaultCategoryId, defaultAccountId]);
 
@@ -59,6 +62,7 @@ export function useStaticRuleForm(params: {
         amountRaw: ruleAmount, dayOfMonth: ruleDay,
         dayType: ruleDayType, includeSaturday: ruleIncludeSaturday,
         categoryId: ruleCatId || undefined, accountId: ruleAccId || undefined,
+        creditCardId: ruleType === 'EXPENSE' ? ruleCardId || undefined : undefined,
       };
       const res = editingRule
         ? await updateRecurrenceRuleAction({ id: editingRule.id, ...payload })
@@ -74,7 +78,7 @@ export function useStaticRuleForm(params: {
     ruleDesc, setRuleDesc, ruleType, setRuleType, ruleNature, setRuleNature,
     ruleAmount, setRuleAmount, ruleDay, setRuleDay,
     ruleDayType, setRuleDayType, ruleIncludeSaturday, setRuleIncludeSaturday,
-    ruleCatId, setRuleCatId, ruleAccId, setRuleAccId,
+    ruleCatId, setRuleCatId, ruleAccId, setRuleAccId, ruleCardId, setRuleCardId,
     isSubmitting, handleSaveStaticRule,
   };
 }

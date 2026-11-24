@@ -35,7 +35,12 @@ interface AttachmentDraft {
 function buildInitialFormValues(
   props: WorkbenchProps,
   editingTx: SerializedTransaction | null,
-  preset?: { type?: 'EXPENSE' | 'INCOME' | 'TRANSFER'; nature?: 'STATIC' | 'VARIABLE' }
+  preset?: {
+    type?: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+    nature?: 'STATIC' | 'VARIABLE';
+    paymentTarget?: 'ACCOUNT' | 'CREDIT_CARD';
+    creditCardId?: string;
+  }
 ): TransactionFormValues {
   const { settings, accounts, creditCards, categories } = props;
   const defaultSource = settings.defaultAccountId || accounts[0]?.id || '';
@@ -67,14 +72,14 @@ function buildInitialFormValues(
   return {
     type: targetType,
     nature: preset?.nature || (matchingCat?.defaultNature as 'STATIC' | 'VARIABLE') || 'VARIABLE',
-    paymentTarget: 'ACCOUNT',
+    paymentTarget: preset?.paymentTarget || (preset?.creditCardId ? 'CREDIT_CARD' : 'ACCOUNT'),
     amount: '',
     desc: '',
     date: new Date().toISOString().slice(0, 10),
     status: 'COMPLETED',
     sourceAccount: defaultSource,
     destAccount: defaultDest,
-    cardId: creditCards[0]?.id || '',
+    cardId: preset?.creditCardId || creditCards[0]?.id || '',
     categoryId: matchingCat?.id || '',
     installments: 1,
     tags: '',
@@ -84,7 +89,12 @@ function buildInitialFormValues(
 export function useTransactionForm(params: {
   isOpen: boolean;
   editingTx: SerializedTransaction | null;
-  preset?: { type?: 'EXPENSE' | 'INCOME' | 'TRANSFER'; nature?: 'STATIC' | 'VARIABLE' };
+  preset?: {
+    type?: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+    nature?: 'STATIC' | 'VARIABLE';
+    paymentTarget?: 'ACCOUNT' | 'CREDIT_CARD';
+    creditCardId?: string;
+  };
   props: WorkbenchProps;
   onClose: () => void;
 }) {

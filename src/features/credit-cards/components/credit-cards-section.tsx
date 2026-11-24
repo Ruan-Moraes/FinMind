@@ -17,7 +17,7 @@ import { deleteCreditCardAction } from '@/features/credit-cards/actions/credit-c
 export function CreditCardsSection() {
   const { props, wb } = useWorkbench();
   const { selectedMonth, creditCards } = props;
-  const { hideValues, setIsPayInvoiceModalOpen, setPendingDelete, handleOpenCreateCardModal, handleOpenEditCardModal } = wb;
+  const { hideValues, setIsPayInvoiceModalOpen, setPendingDelete, handleOpenCreateCardModal, handleOpenEditCardModal, handleOpenCreateTxModal } = wb;
   return (
             <div className="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-900/60 p-6 space-y-4">
               <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -137,10 +137,29 @@ export function CreditCardsSection() {
                             style={{ width: `${Math.min(100, usedPct)}%` }}
                           />
                         </div>
+                        {(card.linkedStaticRulesInCents || 0) > 0 && (
+                          <p className="text-[11px] text-indigo-600 dark:text-indigo-400">
+                            Inclui {formatCentsToBRL(card.linkedStaticRulesInCents || 0, hideValues)} em custos fixos vinculados a este cartão
+                          </p>
+                        )}
                       </div>
 
-                      {card.currentInvoiceInCents > 0 && card.currentInvoiceStatus !== 'PAID' && (
-                        <div className="pt-2 flex justify-end">
+                      <div className="pt-2 flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            handleOpenCreateTxModal({
+                              type: 'EXPENSE',
+                              paymentTarget: 'CREDIT_CARD',
+                              creditCardId: card.id,
+                            })
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Lançar Compra
+                        </Button>
+                        {card.currentInvoiceInCents > 0 && card.currentInvoiceStatus !== 'PAID' && (
                           <Button
                             variant="primary"
                             size="sm"
@@ -149,8 +168,8 @@ export function CreditCardsSection() {
                             <CheckCircle2 className="h-4 w-4" />
                             Pagar Fatura ({formatCentsToBRL(card.currentInvoiceInCents, hideValues)})
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   );
                 })}

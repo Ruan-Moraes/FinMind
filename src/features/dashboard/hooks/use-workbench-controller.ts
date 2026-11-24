@@ -89,6 +89,8 @@ export function useWorkbenchController(props: WorkbenchProps) {
     handleOpenCreateTxModal: (preset?: {
       type?: 'EXPENSE' | 'INCOME' | 'TRANSFER';
       nature?: 'STATIC' | 'VARIABLE';
+      paymentTarget?: 'ACCOUNT' | 'CREDIT_CARD';
+      creditCardId?: string;
     }) => setActiveModal({ type: 'TX', editing: null, preset }),
     handleOpenEditTxModal: (tx: SerializedTransaction) =>
       setActiveModal({ type: 'TX', editing: tx }),

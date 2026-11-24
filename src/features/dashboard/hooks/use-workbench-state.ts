@@ -13,7 +13,12 @@ export type ActiveWorkbenchModal =
   | {
       type: 'TX';
       editing?: SerializedTransaction | null;
-      preset?: { type?: 'EXPENSE' | 'INCOME' | 'TRANSFER'; nature?: 'STATIC' | 'VARIABLE' };
+      preset?: {
+        type?: 'EXPENSE' | 'INCOME' | 'TRANSFER';
+        nature?: 'STATIC' | 'VARIABLE';
+        paymentTarget?: 'ACCOUNT' | 'CREDIT_CARD';
+        creditCardId?: string;
+      };
     }
   | { type: 'ACCOUNT'; editing?: AccountWithBalance | null }
   | { type: 'CARD'; editing?: CreditCardWithSummary | null }

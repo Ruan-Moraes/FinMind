@@ -79,7 +79,7 @@ export function StaticRulesMobileList({
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-zinc-400 truncate">
                       {due.isBusinessDay ? `${due.label} (${due.resolution.formattedDate})` : due.label}{' '}
-                      • {[rule.categoryName, rule.accountName].filter(Boolean).join(' • ') || 'Padrão'}
+                      • {[rule.categoryName, rule.creditCardName ? `Cartão ${rule.creditCardName}` : rule.accountName].filter(Boolean).join(' • ') || 'Padrão'}
                     </div>
                   </div>
                 </div>

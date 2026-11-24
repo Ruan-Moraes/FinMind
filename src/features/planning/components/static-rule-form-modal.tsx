@@ -1,7 +1,7 @@
 'use client';
 import * as React from 'react';
 import { useWorkbench } from '@/features/dashboard/context/workbench-context';
-import { TrendingUp, TrendingDown, ArrowLeftRight, Lock, Sparkles, Pencil, Briefcase, Home, Wifi, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, ArrowLeftRight, Lock, Sparkles, Pencil, Briefcase, Home, Wifi, Zap, CreditCard } from 'lucide-react';
 import { Button } from '@/shared/ui/button';
 import { Modal } from '@/shared/ui/modal';
 import { FormField, Input, Select } from '@/shared/ui/input';
@@ -10,7 +10,7 @@ import { StaticRuleDueDateField } from '@/features/planning/components/static-ru
 
 export function StaticRuleFormModal() {
   const { props, wb } = useWorkbench();
-  const { categories, selectedMonth, selectedYear, holidays = [] } = props;
+  const { categories, creditCards, selectedMonth, selectedYear, holidays = [] } = props;
   const { activeModal, closeModal, handleOpenCreateCategoryModal, handleOpenEditCategoryModal, activeAccounts } = wb;
   const isStaticRuleModalOpen = activeModal?.type === 'STATIC_RULE';
   const editingRule = activeModal?.type === 'STATIC_RULE' ? activeModal.editing || null : null;
@@ -19,7 +19,7 @@ export function StaticRuleFormModal() {
     editingRuleId, ruleDesc, setRuleDesc, ruleType, setRuleType, ruleNature, setRuleNature,
     ruleAmount, setRuleAmount, ruleDay, setRuleDay,
     ruleDayType, setRuleDayType, ruleIncludeSaturday, setRuleIncludeSaturday,
-    ruleCatId, setRuleCatId, ruleAccId, setRuleAccId, isSubmitting, handleSaveStaticRule,
+    ruleCatId, setRuleCatId, ruleAccId, setRuleAccId, ruleCardId, setRuleCardId, isSubmitting, handleSaveStaticRule,
   } = useStaticRuleForm({
     isOpen: isStaticRuleModalOpen,
     editingRule,
@@ -40,16 +40,8 @@ export function StaticRuleFormModal() {
         subtitle="Cadastre ou edite ganhos fixos garantidos e despesas fixas do seu orçamento"
         footer={
           <>
-            <Button variant="secondary" onClick={closeModal}>
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              form="form-static-rule"
-              isLoading={isSubmitting}
-              data-agent-id="modal.staticRule.btn.submit"
-            >
+            <Button variant="secondary" onClick={closeModal}>Cancelar</Button>
+            <Button variant="primary" type="submit" form="form-static-rule" isLoading={isSubmitting} data-agent-id="modal.staticRule.btn.submit">
               {editingRuleId ? 'Salvar Alterações' : 'Salvar Regra Fixa'}
             </Button>
           </>
@@ -64,6 +56,7 @@ export function StaticRuleFormModal() {
             <div className="flex flex-wrap gap-1.5">
               {[
                 { label: 'Salário Fixo Mensal', type: 'INCOME' as const, icon: Briefcase },
+                { label: 'Fatura do Cartão', type: 'EXPENSE' as const, icon: CreditCard },
                 { label: 'Aluguel / Condomínio', type: 'EXPENSE' as const, icon: Home },
                 { label: 'Assinatura IA (ChatGPT/Claude)', type: 'EXPENSE' as const, icon: Sparkles },
                 { label: 'Internet Fibra', type: 'EXPENSE' as const, icon: Wifi },
@@ -224,23 +217,31 @@ export function StaticRuleFormModal() {
                 </div>
               </div>
               <Select value={ruleCatId} onChange={(e) => setRuleCatId(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.type === 'INCOME' ? 'Ganho' : 'Gasto'})
-                  </option>
-                ))}
+                {categories.map((c) => (<option key={c.id} value={c.id}>{c.name} ({c.type === 'INCOME' ? 'Ganho' : 'Gasto'})</option>))}
               </Select>
             </div>
             <FormField label="Conta Vinculada">
               <Select value={ruleAccId} onChange={(e) => setRuleAccId(e.target.value)}>
-                {activeAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
+                {activeAccounts.map((a) => (<option key={a.id} value={a.id}>{a.name}</option>))}
               </Select>
             </FormField>
           </div>
+          {ruleType === 'EXPENSE' && creditCards.length > 0 && (
+            <FormField label="Cartão de Crédito Vinculado (Opcional)" hint="Reflete no limite disponível">
+              <Select
+                value={ruleCardId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setRuleCardId(id);
+                  const found = creditCards.find((c) => c.id === id);
+                  if (found && !editingRuleId && ruleDayType === 'CALENDAR_DAY') setRuleDay(found.dueDay);
+                }}
+              >
+                <option value="">Nenhum (Débito / Conta Bancária)</option>
+                {creditCards.map((c) => (<option key={c.id} value={c.id}>{c.name} ({c.brand}) • Vence dia {c.dueDay}</option>))}
+              </Select>
+            </FormField>
+          )}
         </form>
       </Modal>
   );

@@ -71,6 +71,7 @@ export const recurrenceRuleSchema = z.object({
   includeSaturday: z.boolean().default(false),
   categoryId: z.string().optional(),
   accountId: z.string().optional(),
+  creditCardId: z.string().optional(),
 });
 
 export const categorySchema = z.object({

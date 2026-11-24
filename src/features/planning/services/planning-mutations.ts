@@ -134,6 +134,14 @@ export async function saveRecurrenceRuleForUser(userId: string, raw: unknown) {
     });
     if (!accOwned) return { ok: false as const, error: 'Conta selecionada não encontrada.' };
   }
+  const effectiveCardId = data.type === 'EXPENSE' ? data.creditCardId || null : null;
+  if (effectiveCardId) {
+    const cardOwned = await prisma.creditCard.findFirst({
+      where: { id: effectiveCardId, userId },
+      select: { id: true },
+    });
+    if (!cardOwned) return { ok: false as const, error: 'Cartão de crédito selecionado não encontrado.' };
+  }
 
   const record = {
     description: data.description,
@@ -145,6 +153,7 @@ export async function saveRecurrenceRuleForUser(userId: string, raw: unknown) {
     includeSaturday: data.includeSaturday,
     categoryId: data.categoryId || null,
     accountId: data.accountId || null,
+    creditCardId: effectiveCardId,
   };
 
   if (data.id) {

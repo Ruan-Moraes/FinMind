@@ -61,7 +61,7 @@ export async function loadSerializedDashboardData(params: {
     }),
     prisma.recurrenceRule.findMany({
       where: { userId: user.id, isActive: true },
-      include: { category: true, account: true },
+      include: { category: true, account: true, creditCard: true },
       orderBy: { dayOfMonth: 'asc' },
     }),
     prisma.transaction.findMany({
@@ -133,6 +133,7 @@ export async function loadSerializedDashboardData(params: {
     categoryId: r.categoryId || null, categoryName: r.category?.name || null,
     categoryColor: r.category?.color || null, categoryIcon: r.category?.icon || null,
     accountId: r.accountId || null, accountName: r.account?.name || null,
+    creditCardId: r.creditCardId || null, creditCardName: r.creditCard?.name || null,
   }));
   const transactions = rawTransactions.map((tx) => ({
     id: tx.id, type: tx.type,

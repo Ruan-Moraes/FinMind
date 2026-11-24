@@ -26,6 +26,7 @@ export async function createRecurrenceRuleAction(data: {
   includeSaturday?: boolean;
   categoryId?: string;
   accountId?: string;
+  creditCardId?: string;
 }) {
   const user = await requireAuthenticatedUser();
   const result = await saveRecurrenceRuleForUser(user.id, data);
@@ -46,6 +47,7 @@ export async function updateRecurrenceRuleAction(data: {
   includeSaturday?: boolean;
   categoryId?: string;
   accountId?: string;
+  creditCardId?: string;
 }) {
   const user = await requireAuthenticatedUser();
   const result = await saveRecurrenceRuleForUser(user.id, data);
