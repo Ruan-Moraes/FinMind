@@ -2,6 +2,10 @@
 const nextConfig = {
   distDir: process.env.VERCEL ? '.next' : process.env.NEXT_BUILD_DIR || '.next',
   serverExternalPackages: ['@libsql/client', '@prisma/adapter-libsql', 'libsql', 'unpdf', 'xlsx'],
+  // The agent's Server Actions read these Markdown files at runtime.
+  outputFileTracingIncludes: {
+    '/': ['./docs/knowledge/*.md'],
+  },
   async headers() {
     return [
       {
