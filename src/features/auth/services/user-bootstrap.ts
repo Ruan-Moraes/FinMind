@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/shared/lib/prisma';
 import { getSession, isSessionExplicitlyLoggedOut } from '@/features/auth/services/session-cookies';
@@ -51,27 +52,37 @@ export async function ensurePersonalUserInitialized() {
       throw new Error('Configure ADMIN_PASSWORD com uma senha de pelo menos 16 caracteres e até 72 bytes.');
     }
     const passwordHash = await bcrypt.hash(adminPass, 10);
-    user = await prisma.user.create({
-      data: {
-        email: adminEmail,
-        name: adminName,
-        passwordHash,
-        settings: {
-          create: {
-            theme: 'DARK',
-            density: 'COMFORTABLE',
-            hideValuesByDefault: false,
-            fiscalMonthStartDay: 1,
-            aiProvider: 'OPENAI',
-            aiConnectionMode: 'API_KEY',
-            openaiModel: '',
-            geminiModel: '',
-            claudeModel: '',
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: adminEmail,
+          name: adminName,
+          passwordHash,
+          settings: {
+            create: {
+              theme: 'DARK',
+              density: 'COMFORTABLE',
+              hideValuesByDefault: false,
+              fiscalMonthStartDay: 1,
+              aiProvider: 'OPENAI',
+              aiConnectionMode: 'API_KEY',
+              openaiModel: '',
+              geminiModel: '',
+              claudeModel: '',
+            },
           },
         },
-      },
-      include: { settings: true },
-    });
+        include: { settings: true },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+        throw error;
+      }
+      user = await prisma.user.findUniqueOrThrow({
+        where: { email: adminEmail },
+        include: { settings: true },
+      });
+    }
   } else if (!user.settings) {
     const settings = await prisma.userSettings.create({
       data: {

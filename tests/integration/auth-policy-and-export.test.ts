@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/shared/lib/prisma';
-import { isPublicAuthRequired, requireAuthenticatedUser } from '@/features/auth';
+import { ensurePersonalUserInitialized, isPublicAuthRequired, requireAuthenticatedUser } from '@/features/auth';
 import {
   escapeCsvCell,
   buildTransactionsCsv,
@@ -85,6 +86,20 @@ describe('Integração SQLite: Política de Acesso Público & Exportação CSV/J
     } finally {
       if (prev === undefined) delete process.env.REQUIRE_AUTH;
       else process.env.REQUIRE_AUTH = prev;
+    }
+  });
+
+  it('reutiliza a conta quando a primeira inicialização recebe chamadas simultâneas', async () => {
+    const email = `auth-bootstrap-${randomUUID()}@finmind.local`;
+    vi.stubEnv('ADMIN_EMAIL', email);
+    vi.stubEnv('ADMIN_PASSWORD', 'somente-teste-de-inicializacao');
+    try {
+      const users = await Promise.all(Array.from({ length: 4 }, () => ensurePersonalUserInitialized()));
+      expect(new Set(users.map(({ id }) => id)).size).toBe(1);
+      expect(users.every(({ settings }) => settings?.userId === users[0].id)).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      await prisma.user.deleteMany({ where: { email } });
     }
   });
 
