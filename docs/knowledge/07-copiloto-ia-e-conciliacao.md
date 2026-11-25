@@ -1,9 +1,9 @@
 ---
 docId: ai-copilot-and-reconciliation
 module: ai
-version: 1.2.0
+version: 1.3.0
 screens: ["ai", "modal:SANITY_CHECK"]
-relatedTools: ["navigate_to_section", "generate_financial_report", "guide_feature_workflow", "capture_annotated_screen"]
+relatedTools: ["navigate_to_section", "generate_financial_report", "query_health_reports", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["ia", "copiloto", "provedor", "openai", "gemini", "claude", "api key", "chave", "modelo", "extrato", "conciliacao", "diagnostico", "relatorio"]
 ---
 
@@ -24,4 +24,4 @@ tags: ["ia", "copiloto", "provedor", "openai", "gemini", "claude", "api key", "c
 
 ## Histórico de ações do Agente
 - No fim da aba **Copiloto IA & Extrato** (`ai.panel.auditLog`) há o **Histórico de ações do Agente IA** com as últimas 20 ações (planejadas, executadas, canceladas, falhas e desfeitas).
-- O agente **não** gera nem lê os diagnósticos salvos do painel de saúde financeira; ele pode, porém, montar um relatório sob demanda no chat (`generate_financial_report`), que não é salvo no painel.
+- O agente **lê** os diagnósticos salvos do painel (`query_health_reports`: nota, faixa, riscos e plano de ação), mas **não gera nem exclui** diagnósticos salvos. Para uma análise nova no chat ele usa `generate_financial_report`, que não é salva no painel.

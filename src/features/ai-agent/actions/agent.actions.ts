@@ -136,20 +136,27 @@ export async function confirmAndExecuteAgentAction(auditLogId: string): Promise<
       const result = await executor.executeAndVerify(user.id, parsedParams);
       const durationMs = Date.now() - startedAt;
 
-      if (!result.ok || !result.verified) {
+      if (!result.ok) {
         await updateAuditLogStatus(user.id, log.id, {
           status: 'FAILED',
           errorMessage: result.error || result.summary,
+          // Guarda o que eventualmente chegou a ser gravado, para diagnóstico.
+          afterState: result.afterState ?? null,
           verificationResult: result.verificationDetail ?? { verified: false },
           durationMs,
         });
+        await syncUserFinancialKnowledge(user.id).catch(() => undefined);
+        revalidatePath('/');
         return { ok: false, error: result.error || result.summary };
       }
 
+      // ok=true com verified=false = gravação parcial (ex.: lote com etapas falhas). Registra como
+      // SUCCEEDED com o afterState real, senão o Desfazer ficaria indisponível para o que foi salvo.
       await updateAuditLogStatus(user.id, log.id, {
         status: 'SUCCEEDED',
         afterState: result.afterState ?? null,
-        verificationResult: result.verificationDetail ?? { verified: true },
+        verificationResult: result.verificationDetail ?? { verified: result.verified },
+        errorMessage: result.verified ? null : result.summary,
         durationMs,
       });
 
@@ -158,7 +165,7 @@ export async function confirmAndExecuteAgentAction(auditLogId: string): Promise<
       revalidatePath('/');
       return {
         ok: true,
-        verified: true,
+        verified: result.verified,
         summary: result.summary,
         reversible: Boolean(executor.rollback),
       };
@@ -198,6 +205,10 @@ export async function rollbackAgentExecutionAction(
   try {
     const user = await requireAuthenticatedUser();
     const log = await getUserAuditLog(user.id, auditLogId);
+    // Idempotente: repetir o Desfazer (ex.: duplo clique, outra aba) não vira erro.
+    if (log?.status === 'ROLLED_BACK') {
+      return { ok: true, summary: 'Esta operação já foi desfeita.' };
+    }
     if (!log || log.status !== 'SUCCEEDED') {
       return { ok: false, summary: 'Apenas operações concluídas podem ser desfeitas.' };
     }
@@ -207,15 +218,29 @@ export async function rollbackAgentExecutionAction(
       return { ok: false, summary: 'Esta operação não suporta reversão automática.' };
     }
 
+    // Trava atômica: dois cliques em "Desfazer" não podem reverter (ou recriar) duas vezes.
+    const claimed = await prisma.agentActionAuditLog.updateMany({
+      where: { id: log.id, userId: user.id, status: 'SUCCEEDED' },
+      data: { status: 'ROLLING_BACK' },
+    });
+    if (claimed.count !== 1) {
+      return { ok: false, summary: 'Esta operação já está sendo desfeita ou já foi desfeita.' };
+    }
+
     const beforeState = safeJsonParse(log.beforeStateJson);
     const afterState = safeJsonParse(log.afterStateJson);
-    const res = await executor.rollback(user.id, beforeState, afterState);
+    let res: { ok: boolean; summary: string };
+    try {
+      res = await executor.rollback(user.id, beforeState, afterState);
+    } catch (err) {
+      res = { ok: false, summary: err instanceof Error ? err.message : 'Falha ao desfazer a operação.' };
+    }
 
+    await prisma.agentActionAuditLog.updateMany({
+      where: { id: log.id, userId: user.id, status: 'ROLLING_BACK' },
+      data: { status: res.ok ? 'ROLLED_BACK' : 'SUCCEEDED' },
+    });
     if (res.ok) {
-      await prisma.agentActionAuditLog.updateMany({
-        where: { id: log.id, userId: user.id, status: 'SUCCEEDED' },
-        data: { status: 'ROLLED_BACK' },
-      });
       await syncUserFinancialKnowledge(user.id).catch(() => undefined);
       revalidatePath('/');
     }

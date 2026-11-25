@@ -31,6 +31,8 @@ const TOOL_ACTION_LABELS: Record<string, string> = {
   upsert_account: 'Conta',
   upsert_credit_card: 'Cartão',
   pay_credit_card_invoice: 'Pagar Fatura',
+  delete_balance_target: 'Excluir Meta de Saldo',
+  delete_category: 'Excluir Categoria',
 };
 
 export interface PreparedMutationEntry {

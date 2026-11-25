@@ -156,19 +156,30 @@ async function findTransactionOrThrow(
   if (!m.matchDescription && !m.matchDate && m.matchAmountBRL === undefined) {
     throw new Error('Informe qual lançamento (descrição, data ou valor) ou o ID.');
   }
-  const candidates = await prisma.transaction.findMany({
-    where: {
-      userId,
-      ...(m.matchAmountBRL !== undefined ? { amountInCents: brlToCents(m.matchAmountBRL) } : {}),
-      ...(m.matchDate ? { date: { gte: new Date(`${m.matchDate}T00:00:00.000Z`), lte: new Date(`${m.matchDate}T23:59:59.999Z`) } } : {}),
-    },
-    orderBy: { date: 'desc' },
-    take: 300,
-  });
-  const needle = (m.matchDescription || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const hits = needle
-    ? candidates.filter((t) => t.description.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(needle))
-    : candidates;
+  const baseWhere = {
+    userId,
+    ...(m.matchAmountBRL !== undefined ? { amountInCents: brlToCents(m.matchAmountBRL) } : {}),
+    ...(m.matchDate ? { date: { gte: new Date(`${m.matchDate}T00:00:00.000Z`), lte: new Date(`${m.matchDate}T23:59:59.999Z`) } } : {}),
+  };
+  const fold = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const needle = fold(m.matchDescription || '');
+  const matchesNeedle = (t: { description: string; rawBankDescription: string | null }) =>
+    fold(t.description).includes(needle) || fold(t.rawBankDescription || '').includes(needle);
+
+  let hits: Awaited<ReturnType<typeof prisma.transaction.findMany>>;
+  if (!needle) {
+    hits = await prisma.transaction.findMany({ where: baseWhere, orderBy: { date: 'desc' }, take: 50 });
+  } else {
+    // 1º: busca direta no banco (todo o histórico); 2º: varredura com acentos normalizados.
+    const direct = await prisma.transaction.findMany({
+      where: { ...baseWhere, OR: [{ description: { contains: m.matchDescription!.trim() } }, { rawBankDescription: { contains: m.matchDescription!.trim() } }] },
+      orderBy: { date: 'desc' },
+      take: 50,
+    });
+    hits = direct.length > 0
+      ? direct
+      : (await prisma.transaction.findMany({ where: baseWhere, orderBy: { date: 'desc' }, take: 5000 })).filter(matchesNeedle);
+  }
   if (hits.length === 0) throw new Error('Não encontrei nenhum lançamento com esses critérios.');
   if (hits.length > 1) {
     const list = hits.slice(0, 5).map((t) => `${toIso(t.date)} • ${t.description} • ${formatCentsToBRL(t.amountInCents)} (id ${t.id})`).join('; ');
@@ -299,7 +310,9 @@ export const deleteTransactionExecutor: AgentToolExecutor = {
       title: `Excluir Lançamento: ${tx.description}`,
       summary: series.length > 1
         ? `Remover as ${series.length} parcelas de "${tx.description}" (${formatCentsToBRL(total)}). O impacto em saldo/fatura é revertido.`
-        : `Remover "${tx.description}" de ${formatCentsToBRL(tx.amountInCents)} (${toIso(tx.date)}). O impacto em saldo/fatura é revertido.`,
+        : tx.installmentGroupId
+          ? `Remover SOMENTE a parcela ${tx.installmentNumber ?? '?'}/${tx.totalInstallments ?? '?'} de "${tx.description}" (${formatCentsToBRL(tx.amountInCents)}, ${toIso(tx.date)}); as demais parcelas continuam. Para remover a compra inteira, peça para excluir todas as parcelas.`
+          : `Remover "${tx.description}" de ${formatCentsToBRL(tx.amountInCents)} (${toIso(tx.date)}). O impacto em saldo/fatura é revertido.`,
       beforePreview: [
         { label: 'Lançamento', value: tx.description },
         { label: 'Valor', value: formatCentsToBRL(total) },
@@ -331,42 +344,75 @@ export const deleteTransactionExecutor: AgentToolExecutor = {
   async rollback(userId, beforeState) {
     const rows = (beforeState as { rows?: Array<Record<string, unknown>> } | null)?.rows;
     if (!rows?.length) return { ok: false, summary: 'Estado anterior indisponível para restaurar.' };
-    let groupId: string | null = null;
-    const first = rows[0];
-    if (first.installmentGroupId) {
+
+    const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+    const ids = (key: string) => Array.from(new Set(rows.map((r) => str(r[key])).filter((v): v is string => Boolean(v))));
+    // Referências que podem ter sido removidas depois da exclusão: só religa o que ainda existe (evita erro de FK).
+    const [accounts, cards, invoices, categories, rules, batches, groups] = await Promise.all([
+      prisma.account.findMany({ where: { userId, id: { in: [...ids('sourceAccountId'), ...ids('destinationAccountId')] } }, select: { id: true } }),
+      prisma.creditCard.findMany({ where: { userId, id: { in: ids('creditCardId') } }, select: { id: true } }),
+      prisma.creditCardInvoice.findMany({ where: { id: { in: ids('invoiceId') }, creditCard: { userId } }, select: { id: true } }),
+      prisma.category.findMany({ where: { userId, id: { in: ids('categoryId') } }, select: { id: true } }),
+      prisma.recurrenceRule.findMany({ where: { userId, id: { in: ids('recurrenceRuleId') } }, select: { id: true } }),
+      prisma.statementImportBatch.findMany({ where: { userId, id: { in: ids('importBatchId') } }, select: { id: true } }),
+      prisma.installmentGroup.findMany({ where: { userId, id: { in: ids('installmentGroupId') } }, select: { id: true } }),
+    ]);
+    const alive = new Set([...accounts, ...cards, ...invoices, ...categories, ...rules, ...batches, ...groups].map((x) => x.id));
+    const keep = (v: unknown) => { const id = str(v); return id && alive.has(id) ? id : null; };
+
+    // Parcela avulsa: volta para a compra original se o grupo ainda existe; série inteira: recria o grupo original.
+    const groupMap = new Map<string, string>();
+    for (const originalGroupId of ids('installmentGroupId')) {
+      if (alive.has(originalGroupId)) { groupMap.set(originalGroupId, originalGroupId); continue; }
+      const series = rows.filter((r) => r.installmentGroupId === originalGroupId);
+      const first = series[0];
       const g = await prisma.installmentGroup.create({
         data: {
           userId,
           description: String(first.description),
-          totalAmountInCents: rows.reduce((s, r) => s + Number(r.amountInCents), 0),
-          totalInstallments: rows.length,
+          totalAmountInCents: series.reduce((sum, r) => sum + Number(r.amountInCents), 0),
+          totalInstallments: Number(first.totalInstallments) || series.length,
         },
       });
-      groupId = g.id;
+      groupMap.set(originalGroupId, g.id);
     }
-    for (const r of rows) {
-      await prisma.transaction.create({
-        data: {
-          userId,
-          type: String(r.type),
-          nature: String(r.nature),
-          amountInCents: Number(r.amountInCents),
-          date: new Date(String(r.date)),
-          description: String(r.description),
-          status: String(r.status),
-          tags: String(r.tags ?? ''),
-          sourceAccountId: (r.sourceAccountId as string) || null,
-          destinationAccountId: (r.destinationAccountId as string) || null,
-          creditCardId: (r.creditCardId as string) || null,
-          invoiceId: (r.invoiceId as string) || null,
-          categoryId: (r.categoryId as string) || null,
-          installmentGroupId: groupId,
-          installmentNumber: (r.installmentNumber as number) ?? null,
-          totalInstallments: (r.totalInstallments as number) ?? null,
-          isUserConfirmed: true,
-        },
-      });
-    }
-    return { ok: true, summary: `${rows.length} lançamento(s) restaurado(s).` };
+
+    await prisma.$transaction(
+      rows.map((r) =>
+        prisma.transaction.create({
+          data: {
+            userId,
+            type: String(r.type),
+            nature: String(r.nature),
+            amountInCents: Number(r.amountInCents),
+            date: new Date(String(r.date)),
+            description: String(r.description),
+            status: String(r.status),
+            tags: String(r.tags ?? ''),
+            sourceAccountId: keep(r.sourceAccountId),
+            destinationAccountId: keep(r.destinationAccountId),
+            creditCardId: keep(r.creditCardId),
+            invoiceId: keep(r.invoiceId),
+            categoryId: keep(r.categoryId),
+            recurrenceRuleId: keep(r.recurrenceRuleId),
+            importBatchId: keep(r.importBatchId),
+            installmentGroupId: str(r.installmentGroupId) ? groupMap.get(String(r.installmentGroupId)) ?? null : null,
+            installmentNumber: (r.installmentNumber as number) ?? null,
+            totalInstallments: (r.totalInstallments as number) ?? null,
+            externalTransactionHash: str(r.externalTransactionHash),
+            rawBankDescription: str(r.rawBankDescription),
+            financialAction: str(r.financialAction),
+            counterparty: str(r.counterparty),
+            paymentMethod: str(r.paymentMethod),
+            purpose: str(r.purpose),
+            aiConfidenceScore: typeof r.aiConfidenceScore === 'number' ? r.aiConfidenceScore : null,
+            aiConfidenceLevel: str(r.aiConfidenceLevel),
+            isAiClassified: Boolean(r.isAiClassified),
+            isUserConfirmed: r.isUserConfirmed === undefined ? true : Boolean(r.isUserConfirmed),
+          },
+        })
+      )
+    );
+    return { ok: true, summary: `${rows.length} lançamento(s) restaurado(s) com os dados originais (anexos não são restaurados).` };
   },
 };

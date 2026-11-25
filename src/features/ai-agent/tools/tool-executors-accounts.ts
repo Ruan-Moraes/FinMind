@@ -32,21 +32,22 @@ export const upsertAccountExecutor: AgentToolExecutor = {
       throw new Error(`Já existe uma conta chamada "${parsed.name}". Para alterá-la, informe o nome atual.`);
     }
     const initial = parsed.initialBalanceBRL !== undefined ? brlToCents(parsed.initialBalanceBRL) : undefined;
+    const finalType = (parsed.type ?? existing?.type ?? 'CHECKING') as keyof typeof ACCOUNT_TYPE_LABEL;
     return {
       title: existing ? `Editar Conta: ${existing.name}` : `Nova Conta: ${parsed.name}`,
       summary: existing
-        ? `Atualizar a conta "${existing.name}" (${ACCOUNT_TYPE_LABEL[parsed.type]}).`
-        : `Criar a conta "${parsed.name}" (${ACCOUNT_TYPE_LABEL[parsed.type]}) com saldo inicial de ${formatCentsToBRL(initial ?? 0)}.`,
+        ? `Atualizar a conta "${existing.name}" (${ACCOUNT_TYPE_LABEL[finalType] || finalType}).`
+        : `Criar a conta "${parsed.name}" (${ACCOUNT_TYPE_LABEL[finalType]}) com saldo inicial de ${formatCentsToBRL(initial ?? 0)}.`,
       beforePreview: existing
         ? [{ label: 'Nome', value: existing.name }, { label: 'Tipo', value: ACCOUNT_TYPE_LABEL[existing.type as keyof typeof ACCOUNT_TYPE_LABEL] || existing.type }, { label: 'Saldo inicial', value: formatCentsToBRL(existing.initialBalanceInCents) }]
         : [{ label: 'Contas', value: 'Nova conta' }],
       afterPreview: [
         { label: 'Nome', value: parsed.name },
-        { label: 'Tipo', value: ACCOUNT_TYPE_LABEL[parsed.type] },
+        { label: 'Tipo', value: ACCOUNT_TYPE_LABEL[finalType] || finalType },
         ...(initial !== undefined ? [{ label: 'Saldo inicial', value: formatCentsToBRL(initial) }] : []),
       ],
       beforeState: existing ? { action: 'UPDATE', id: existing.id, name: existing.name, type: existing.type, color: existing.color, initialBalanceInCents: existing.initialBalanceInCents } : { action: 'CREATE' },
-      normalizedParams: { ...parsed, existingId: existing?.id ?? null },
+      normalizedParams: { ...parsed, type: finalType, existingId: existing?.id ?? null },
       postConfirmVisualSteps: [
         { id: 'a1', action: 'SWITCH_TAB', tab: 'accounts', targetId: 'nav.tab.accounts', caption: 'Abrindo Contas & Cartões' },
         { id: 'a2', action: 'HIGHLIGHT', targetId: 'accounts.btn.createAccount', caption: `Conta "${parsed.name}"`, pauseMs: 400 },
@@ -56,27 +57,29 @@ export const upsertAccountExecutor: AgentToolExecutor = {
   },
   async executeAndVerify(userId, params) {
     const parsed = upsertAccountToolSchema.parse(params);
+    const existingIdRaw = typeof params.existingId === 'string' ? params.existingId : null;
+    const current = existingIdRaw ? await prisma.account.findFirst({ where: { id: existingIdRaw, userId } }) : null;
+    const accountType = (parsed.type ?? current?.type ?? 'CHECKING') as 'CHECKING' | 'SAVINGS' | 'CASH';
     const existingId = typeof params.existingId === 'string' ? params.existingId : null;
     const color = parsed.color || '#10b981';
     let accountId: string;
     if (existingId) {
-      const cur = await prisma.account.findFirst({ where: { id: existingId, userId } });
       const res = await updateAccountForUser(userId, {
-        id: existingId, name: parsed.name, type: parsed.type, color: parsed.color || cur?.color || color,
+        id: existingId, name: parsed.name, type: accountType, color: parsed.color || current?.color || color,
         ...(parsed.initialBalanceBRL !== undefined ? { initialBalanceRaw: centsInput(brlToCents(parsed.initialBalanceBRL)) } : {}),
       });
       if (!res.ok) return { ok: false, verified: false, summary: res.error, error: res.error };
       accountId = existingId;
     } else {
       const res = await createAccountForUser(userId, {
-        name: parsed.name, type: parsed.type, color,
+        name: parsed.name, type: accountType, color,
         initialBalanceRaw: centsInput(brlToCents(parsed.initialBalanceBRL ?? 0)),
       });
       if (!res.ok) return { ok: false, verified: false, summary: res.error, error: res.error };
       accountId = res.account.id;
     }
     const row = await prisma.account.findFirst({ where: { id: accountId, userId } });
-    const verified = Boolean(row && row.name === parsed.name && row.type === parsed.type);
+    const verified = Boolean(row && row.name === parsed.name && row.type === accountType);
     return { ok: verified, verified, summary: verified ? `Conta "${parsed.name}" ${existingId ? 'atualizada' : 'criada'} e verificada.` : 'Não foi possível verificar a conta.', afterState: row };
   },
   async rollback(userId, beforeState, afterState) {
@@ -103,19 +106,31 @@ export const upsertCreditCardExecutor: AgentToolExecutor = {
     if (!existing && cards.some((c) => c.name.trim().toLowerCase() === parsed.name.trim().toLowerCase())) {
       throw new Error(`Já existe um cartão chamado "${parsed.name}". Para alterá-lo, informe o nome atual.`);
     }
-    const limit = brlToCents(parsed.limitBRL);
+    if (!existing) {
+      const missing = [
+        parsed.limitBRL === undefined && 'limitBRL',
+        parsed.closingDay === undefined && 'closingDay',
+        parsed.dueDay === undefined && 'dueDay',
+      ].filter(Boolean);
+      if (missing.length > 0) throw new Error(`Para criar o cartão, faltam: ${missing.join(', ')}. Para editar um cartão existente, informe matchName.`);
+    }
+    // Na edição, campos omitidos mantêm o valor atual (bandeira nunca volta ao padrão).
+    const brand = parsed.brand ?? existing?.brand ?? 'Mastercard';
+    const limit = parsed.limitBRL !== undefined ? brlToCents(parsed.limitBRL) : existing!.limitInCents;
+    const closingDay = parsed.closingDay ?? existing!.closingDay;
+    const dueDay = parsed.dueDay ?? existing!.dueDay;
     return {
       title: existing ? `Editar Cartão: ${existing.name}` : `Novo Cartão: ${parsed.name}`,
-      summary: `${existing ? 'Atualizar' : 'Cadastrar'} cartão "${parsed.name}" (${parsed.brand}) com limite ${formatCentsToBRL(limit)}, fecha dia ${parsed.closingDay} e vence dia ${parsed.dueDay}.`,
+      summary: `${existing ? 'Atualizar' : 'Cadastrar'} cartão "${parsed.name}" (${brand}) com limite ${formatCentsToBRL(limit)}, fecha dia ${closingDay} e vence dia ${dueDay}.`,
       beforePreview: existing
-        ? [{ label: 'Nome', value: existing.name }, { label: 'Limite', value: formatCentsToBRL(existing.limitInCents) }, { label: 'Fechamento/Vencimento', value: `dia ${existing.closingDay} / dia ${existing.dueDay}` }]
+        ? [{ label: 'Nome', value: existing.name }, { label: 'Bandeira', value: existing.brand }, { label: 'Limite', value: formatCentsToBRL(existing.limitInCents) }, { label: 'Fechamento/Vencimento', value: `dia ${existing.closingDay} / dia ${existing.dueDay}` }]
         : [{ label: 'Cartões', value: 'Novo cartão' }],
       afterPreview: [
-        { label: 'Nome', value: parsed.name }, { label: 'Bandeira', value: parsed.brand }, { label: 'Limite', value: formatCentsToBRL(limit) },
-        { label: 'Fechamento/Vencimento', value: `dia ${parsed.closingDay} / dia ${parsed.dueDay}` },
+        { label: 'Nome', value: parsed.name }, { label: 'Bandeira', value: brand }, { label: 'Limite', value: formatCentsToBRL(limit) },
+        { label: 'Fechamento/Vencimento', value: `dia ${closingDay} / dia ${dueDay}` },
       ],
       beforeState: existing ? { action: 'UPDATE', id: existing.id, name: existing.name, brand: existing.brand, limitInCents: existing.limitInCents, closingDay: existing.closingDay, dueDay: existing.dueDay, color: existing.color } : { action: 'CREATE' },
-      normalizedParams: { ...parsed, existingId: existing?.id ?? null },
+      normalizedParams: { ...parsed, brand, limitBRL: limit / 100, closingDay, dueDay, existingId: existing?.id ?? null },
       postConfirmVisualSteps: [
         { id: 'c1', action: 'SWITCH_TAB', tab: 'accounts', targetId: 'nav.tab.accounts', caption: 'Abrindo Contas & Cartões' },
         { id: 'c2', action: 'HIGHLIGHT', targetId: 'accounts.btn.createCard', caption: `Cartão "${parsed.name}"`, pauseMs: 400 },
@@ -126,25 +141,33 @@ export const upsertCreditCardExecutor: AgentToolExecutor = {
   async executeAndVerify(userId, params) {
     const parsed = upsertCreditCardToolSchema.parse(params);
     const existingId = typeof params.existingId === 'string' ? params.existingId : null;
-    const limit = brlToCents(parsed.limitBRL);
+    const current = existingId ? await prisma.creditCard.findFirst({ where: { id: existingId, userId } }) : null;
+    if (existingId && !current) return { ok: false, verified: false, summary: 'Cartão não encontrado.', error: 'Cartão não encontrado.' };
+    const brand = parsed.brand ?? current?.brand ?? 'Mastercard';
+    const limit = parsed.limitBRL !== undefined ? brlToCents(parsed.limitBRL) : current?.limitInCents;
+    const closingDay = parsed.closingDay ?? current?.closingDay;
+    const dueDay = parsed.dueDay ?? current?.dueDay;
+    if (limit === undefined || limit <= 0 || closingDay === undefined || dueDay === undefined) {
+      return { ok: false, verified: false, summary: 'Limite e dias de fechamento/vencimento são obrigatórios.', error: 'Parâmetros incompletos.' };
+    }
     let cardId: string;
     if (existingId) {
       const res = await prisma.creditCard.updateMany({
         where: { id: existingId, userId },
-        data: { name: parsed.name, brand: parsed.brand, limitInCents: limit, closingDay: parsed.closingDay, dueDay: parsed.dueDay, ...(parsed.color ? { color: parsed.color } : {}) },
+        data: { name: parsed.name, brand, limitInCents: limit, closingDay, dueDay, ...(parsed.color ? { color: parsed.color } : {}) },
       });
       if (res.count === 0) return { ok: false, verified: false, summary: 'Cartão não encontrado.', error: 'Cartão não encontrado.' };
       cardId = existingId;
     } else {
       const res = await createCreditCardForUser(userId, {
-        name: parsed.name, brand: parsed.brand, limitRaw: centsInput(limit),
-        closingDay: parsed.closingDay, dueDay: parsed.dueDay, color: parsed.color || '#6366f1',
+        name: parsed.name, brand, limitRaw: centsInput(limit),
+        closingDay, dueDay, color: parsed.color || '#6366f1',
       });
       if (!res.ok) return { ok: false, verified: false, summary: res.error, error: res.error };
       cardId = res.card.id;
     }
     const row = await prisma.creditCard.findFirst({ where: { id: cardId, userId } });
-    const verified = Boolean(row && row.limitInCents === limit && row.closingDay === parsed.closingDay && row.dueDay === parsed.dueDay);
+    const verified = Boolean(row && row.limitInCents === limit && row.closingDay === closingDay && row.dueDay === dueDay && row.brand === brand);
     return { ok: verified, verified, summary: verified ? `Cartão "${parsed.name}" ${existingId ? 'atualizado' : 'criado'} e verificado.` : 'Não foi possível verificar o cartão.', afterState: row };
   },
   async rollback(userId, beforeState, afterState) {

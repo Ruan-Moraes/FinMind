@@ -160,7 +160,7 @@ describe('Integração: ferramentas estendidas do Agente IA', () => {
     const ex = getMutationToolExecutor('upsert_portfolio_goal')!;
     await expect(
       ex.preparePreview(userId, { matchTitle: 'Viagem Marte', title: 'Viagem Marte', targetAmountBRL: 5000, targetMonth: 12, targetYear: 2027 })
-    ).rejects.toThrow(/Não encontrei a meta/);
+    ).rejects.toThrow(/Não encontrei meta/);
   });
 
   it('previsão e meta de saldo: cria, edita e exclui', async () => {

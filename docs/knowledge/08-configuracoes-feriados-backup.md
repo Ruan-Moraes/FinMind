@@ -1,7 +1,7 @@
 ---
 docId: settings-holidays-and-backup
 module: settings
-version: 1.2.0
+version: 1.2.1
 screens: ["modal:SETTINGS", "modal:HOLIDAYS", "modal:RESET"]
 relatedTools: ["open_settings", "update_user_preferences", "guide_feature_workflow", "capture_annotated_screen"]
 tags: ["configuracoes", "preferencias", "estado", "cidade", "feriados", "dias uteis", "ciclo mensal", "backup", "snapshot", "exportar", "reset"]
@@ -14,7 +14,7 @@ tags: ["configuracoes", "preferencias", "estado", "cidade", "feriados", "dias ut
 
 ## Preferências Configuráveis (`modal:SETTINGS`)
 - **Aparência da Interface:** Modo Escuro, Modo Claro ou Sistema.
-- **Conta Padrão para Lançar** (`defaultAccountId`), **Densidade de Tabelas** (`COMFORTABLE` / `COMPACT`) e **Início do Ciclo Mensal** (`fiscalMonthStartDay`, 1 a 31).
+- **Conta Padrão para Lançar** (`defaultAccountId`), **Densidade de Tabelas** (`COMFORTABLE` / `COMPACT`) e **Início do Ciclo Mensal** (`fiscalMonthStartDay`, 1 a 28; valores antigos 29–31 passam a valer 28).
 - **Modo Privacidade:** Iniciar com valores ocultos.
 - **Localização & Calendário de Feriados (Dias Úteis):**
   - Seletor pesquisável de **Estado (UF)** (`modal.settings.select.state`) e campo **Cidade** (`modal.settings.input.city`).

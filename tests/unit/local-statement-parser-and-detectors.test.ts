@@ -10,7 +10,6 @@ import {
   buildSubscriptionStatementPrompt,
   buildSubscriptionStatusPrompt,
 } from '@/features/ai-copilot/providers/copilot-types-and-prompts';
-import { buildGroundedAssistantPrompt } from '@/features/ai-copilot/assistant/assistant-types-and-prompts';
 import {
   stripInlinePdfHeaderFooterNoise,
   isPdfNoiseOrHeaderLine,
@@ -95,7 +94,7 @@ describe('Parser Local de Extratos em Texto Livre e Utilitários de PDF/Detecç�
     expect(detectStatementFormat('dados.txt', 'Texto livre simples')).toBe('TXT');
   });
 
-  it('gera prompts estruturados para assinatura de extrato, diagnóstico e assistente RAG', () => {
+  it('gera prompts estruturados para assinatura de extrato e diagnóstico', () => {
     const stmtPrompt = buildSubscriptionStatementPrompt(
       '10/11/2026 Pix Padaria -20,00',
       [
@@ -118,50 +117,5 @@ describe('Parser Local de Extratos em Texto Livre e Utilitários de PDF/Detecç�
       momVariationPercent: 5,
     });
     expect(statusPrompt).toContain('Moradia');
-
-    const ragPrompt = buildGroundedAssistantPrompt({
-      modelDisplayName: 'GPT-4o Mini',
-      cleanQuestion: 'Como reduzir gastos?',
-      refMonth: 11,
-      refYear: 2026,
-      consolidatedBalanceInCents: 500000,
-      netWorthInCents: 450000,
-      monthSummary: {
-        month: 11,
-        year: 2026,
-        label: 'Novembro 2026',
-        totalIncomeInCents: 600000,
-        totalExpenseInCents: 300000,
-        netBalanceInCents: 300000,
-        staticExpenseInCents: 200000,
-        variableExpenseInCents: 100000,
-        staticIncomeInCents: 600000,
-        variableIncomeInCents: 0,
-        championCategory: null,
-        topExpenseItem: null,
-        categoryBreakdown: [],
-      },
-      staticBaseline: {
-        staticIncomeInCents: 600000,
-        staticExpenseInCents: 200000,
-        variableIncomeInCents: 0,
-        variableExpenseInCents: 100000,
-        freeDiscretionaryIncomeInCents: 400000,
-        isOverCommitted: false,
-        commitmentPercent: 33.3,
-      },
-      momComparison: {
-        monthA: { month: 10, year: 2026, label: 'Outubro 2026', totalIncomeInCents: 600000, totalExpenseInCents: 280000, netBalanceInCents: 320000, staticExpenseInCents: 200000, variableExpenseInCents: 80000, staticIncomeInCents: 600000, variableIncomeInCents: 0, championCategory: null, topExpenseItem: null, categoryBreakdown: [] },
-        monthB: { month: 11, year: 2026, label: 'Novembro 2026', totalIncomeInCents: 600000, totalExpenseInCents: 300000, netBalanceInCents: 300000, staticExpenseInCents: 200000, variableExpenseInCents: 100000, staticIncomeInCents: 600000, variableIncomeInCents: 0, championCategory: null, topExpenseItem: null, categoryBreakdown: [] },
-        expenseDiffInCents: 20000,
-        expenseVariationPercent: 7.1,
-        incomeDiffInCents: 0,
-        incomeVariationPercent: 0,
-        categoryDeltas: [],
-      },
-      portfolioGoals: [],
-      chunks: [],
-    });
-    expect(ragPrompt).toContain('Como reduzir gastos?');
   });
 });

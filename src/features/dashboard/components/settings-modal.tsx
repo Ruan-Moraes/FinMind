@@ -169,9 +169,9 @@ export function SettingsModal() {
               </Select>
             </FormField>
 
-            <FormField label="Início do Ciclo Mensal" hint="1 a 31">
+            <FormField label="Início do Ciclo Mensal" hint="1 a 28">
               <Input
-                data-agent-id="modal.settings.fiscalDay" type="number" min={1} max={31}
+                data-agent-id="modal.settings.fiscalDay" type="number" min={1} max={28}
                 tabular prefixText="Dia" value={cfgFiscalDay}
                 onChange={(e) => setCfgFiscalDay(Number(e.target.value))}
               />

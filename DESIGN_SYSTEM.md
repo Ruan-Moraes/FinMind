@@ -121,7 +121,7 @@ interface UserSettings {
   hideValuesByDefault: boolean;           // Modo privacidade (oculta R$ com ••••••)
   
   // Regras de Fechamento Pessoal
-  fiscalMonthStartDay: number;            // 1 a 31 (ex: dia 5, quando cai o salário)
+  fiscalMonthStartDay: number;            // 1 a 28 (ex: dia 5, quando cai o salário)
   defaultAccountId?: string;              // Conta pré-selecionada ao abrir modal de despesa
   
   updatedAt: Date;

@@ -16,12 +16,60 @@ function normalizeText(raw: string): string {
     .trim();
 }
 
-function parseBrlAmount(text: string): number | null {
-  const m = text.match(/r\$\s*([\d.]+(?:,\d{1,2})?)|(?:\bpara|\bde)\s+([\d.]+(?:,\d{1,2})?)\b/i);
-  const raw = m?.[1] || m?.[2];
-  if (!raw) return null;
-  const num = Number(raw.replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(num) && num > 0 ? num : null;
+export function parseBrlAmount(text: string): number | null {
+  const toNum = (raw: string, mil?: string) => {
+    const num = Number(raw.replace(/\./g, '').replace(',', '.')) * (mil ? 1000 : 1);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  };
+  // "R$" tem prioridade: evita confundir o ano ("para 2027") com o valor.
+  const brl = text.match(/r\$\s*([\d.]+(?:,\d{1,2})?)(\s*mil\b)?/i);
+  if (brl) return toNum(brl[1], brl[2]);
+  const loose = text.match(/\b(para|de|valor)\s+([\d.]+(?:,\d{1,2})?)(\s*(?:mil|reais)\b)?/i);
+  if (!loose) return null;
+  // "para 2027" é um prazo (ano), não um valor.
+  if (!loose[3] && loose[1].toLowerCase() === 'para' && /^20\d{2}$/.test(loose[2])) return null;
+  return toNum(loose[2], loose[3]?.trim().toLowerCase() === 'mil' ? 'mil' : undefined);
+}
+
+const MONTHS_PT = ['janeiro', 'fevereiro', 'marco', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+/** Extrai o nome da meta ("meta de viagem de R$ 5000" → "Viagem"). */
+export function extractGoalTitle(message: string): string | null {
+  const m = message.match(
+    /\bmeta\s+(?:de\s+carteira\s+)?(?:de|para|chamada|do|da|"|“)?\s*["“']?([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ ]{1,40}?)["”']?\s*(?=(?:\b(?:de|no valor de|com|ate|até|para|em|no|valor)\b\s*)?(?:r\$|\d)|\b(?:ate|até)\b|$|[.,;!?])/i
+  );
+  const raw = m?.[1]?.trim();
+  if (!raw || /^(r|de|para|do|da|no|com|valor|no valor|nova|uma)$/i.test(raw)) return null;
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+/** Prazo da meta: "até dezembro de 2027", "em 06/2027", "até 2028", "em 8 meses"; padrão = 12 meses à frente. */
+export function extractGoalDeadline(message: string, refMonth: number, refYear: number): { month: number; year: number } {
+  const norm = normalizeText(message);
+  const named = norm.match(new RegExp(`\\b(${MONTHS_PT.join('|')})\\b(?:\\s+de)?\\s+(\\d{4})`));
+  if (named) return { month: MONTHS_PT.indexOf(named[1]) + 1, year: Number(named[2]) };
+  const numeric = norm.match(/\b(0?[1-9]|1[0-2])\/(\d{4})\b/);
+  if (numeric) return { month: Number(numeric[1]), year: Number(numeric[2]) };
+  const inMonths = norm.match(/\bem\s+(\d{1,3})\s+mes(?:es)?\b/);
+  const inYears = norm.match(/\bem\s+(\d{1,2})\s+anos?\b/);
+  const offset = inMonths ? Number(inMonths[1]) : inYears ? Number(inYears[1]) * 12 : null;
+  if (offset) {
+    const idx = refYear * 12 + (refMonth - 1) + offset;
+    return { month: (idx % 12) + 1, year: Math.floor(idx / 12) };
+  }
+  const yearOnly = norm.match(/\b(?:ate|em|para)\s+(20\d{2})\b/);
+  if (yearOnly) return { month: 12, year: Number(yearOnly[1]) };
+  return { month: refMonth, year: refYear + 1 };
+}
+
+function buildLocalGoalArgs(message: string, uiState: UiStateSnapshot, amount: number) {
+  const deadline = extractGoalDeadline(message, uiState.selectedMonth, uiState.selectedYear);
+  return {
+    title: extractGoalTitle(message) || 'Nova Meta de Carteira',
+    targetAmountBRL: amount,
+    targetMonth: deadline.month,
+    targetYear: deadline.year,
+  };
 }
 
 export function detectDeterministicToolCall(
@@ -132,15 +180,7 @@ export function detectDeterministicToolCall(
   ) {
     const amount = parseBrlAmount(message);
     if (amount) {
-      return {
-        name: 'upsert_portfolio_goal',
-        args: {
-          title: 'Nova Meta de Carteira',
-          targetAmountBRL: amount,
-          targetMonth: uiState.selectedMonth,
-          targetYear: uiState.selectedYear,
-        },
-      };
+      return { name: 'upsert_portfolio_goal', args: buildLocalGoalArgs(message, uiState, amount) };
     }
   }
 
@@ -152,8 +192,8 @@ export function detectDeterministicToolCall(
     if (cityMatch) args.holidayCity = cityMatch[1].trim();
     const cycleMatch = norm.match(/ciclo\s+mensal.*?\bdia\s+(\d{1,2})\b/);
     if (cycleMatch) args.fiscalMonthStartDay = Number(cycleMatch[1]);
-    if (/\btema\s+claro\b/.test(norm)) args.theme = 'LIGHT';
-    if (/\btema\s+escuro\b/.test(norm)) args.theme = 'DARK';
+    if (/\btema\s+(?:para\s+(?:o\s+)?)?(?:modo\s+)?claro\b/.test(norm)) args.theme = 'LIGHT';
+    if (/\btema\s+(?:para\s+(?:o\s+)?)?(?:modo\s+)?escuro\b/.test(norm)) args.theme = 'DARK';
     if (Object.keys(args).length > 0) return { name: 'update_user_preferences', args };
   }
 
@@ -204,15 +244,7 @@ export function detectDeterministicToolCalls(
     if (primary.args.tab === 'goals' && amount) {
       return [
         primary,
-        {
-          name: 'upsert_portfolio_goal',
-          args: {
-            title: 'Nova Meta de Carteira',
-            targetAmountBRL: amount,
-            targetMonth: uiState.selectedMonth,
-            targetYear: uiState.selectedYear,
-          },
-        },
+        { name: 'upsert_portfolio_goal', args: buildLocalGoalArgs(message, uiState, amount) },
       ];
     }
   }

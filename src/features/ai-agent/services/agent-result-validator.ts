@@ -9,6 +9,10 @@ export interface IntentValidationInput {
   visualSteps: AgentVisualStep[];
   pendingMutation?: PendingAgentMutation | null;
   narrative: string;
+  /** O modelo chamou guide_feature_workflow neste turno (os passos visuais só são montados depois do loop). */
+  guideRequested?: boolean;
+  /** Alguma mutação foi preparada com sucesso (o cartão de confirmação só é criado depois do loop). */
+  mutationPrepared?: boolean;
 }
 
 export interface IntentValidationResult {
@@ -32,10 +36,11 @@ export function validateAgentTurnOutcome(input: IntentValidationInput): IntentVa
     input.actionToolsCalled.every((t) => t === 'navigate_to_section' || t === 'open_settings') &&
     input.readToolsExecuted.length === 0 &&
     input.contentBlocks.length === 0 &&
-    !input.pendingMutation;
+    !input.pendingMutation &&
+    !input.mutationPrepared;
 
   const asksForChartOrTable =
-    /\b(grafic[oa][s]?|pizza|rosca|donut|barra[s]?|linha[s]?|tabela[s]?|chart|diagrama)\b/.test(q);
+    /\b(grafic[oa][s]?|pizza|rosca|donut|em barras?|em linhas?|linha do tempo|tabela[s]?|chart|diagrama)\b/.test(q);
   const asksForReportOrAnalysis =
     /\b(analis[a-z]*|compar[a-z]*|relatori[oa][s]?|diagnostic[oa][s]?|evoluc[a-z]*|proje[ct][a-z]*|simula[a-z]*|balanco|resumo financeiro)\b/.test(
       q
@@ -98,7 +103,8 @@ export function validateAgentTurnOutcome(input: IntentValidationInput): IntentVa
   }
 
   // 5. Pedido composto: pediu para ensinar E também configurar/criar
-  if (asksToTeach && asksToConfigureAlso && input.visualSteps.length > 0 && !input.pendingMutation) {
+  const guided = input.visualSteps.length > 0 || Boolean(input.guideRequested);
+  if (asksToTeach && asksToConfigureAlso && guided && !input.pendingMutation && !input.mutationPrepared) {
     const asksClarification = /\?/.test(input.narrative);
     if (!asksClarification) {
       return {

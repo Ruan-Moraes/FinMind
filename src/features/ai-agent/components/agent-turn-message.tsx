@@ -61,7 +61,7 @@ export function AgentTurnMessage(props: {
       </div>
 
       {payload.apiWarning && (
-        <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 p-2 text-[11px] text-amber-800 dark:text-amber-300">
+        <div className="rounded-lg border border-amber-200 dark:border-amber-900/60 bg-amber-50/70 dark:bg-amber-950/30 p-2 text-[11px] text-amber-800 dark:text-amber-300 [overflow-wrap:anywhere]">
           {payload.apiWarning}
         </div>
       )}

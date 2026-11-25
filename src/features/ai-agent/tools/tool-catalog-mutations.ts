@@ -17,6 +17,7 @@ export const categorizeTransactionsToolSchema = z.object({
   month: z.coerce.number().int().min(1).max(12).optional(),
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   onlyUncategorized: z.boolean().default(true),
+  rememberForFuture: z.boolean().default(true),
 });
 
 export const CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
@@ -39,7 +40,7 @@ export const CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS: ProviderToolDeclarat
   {
     name: 'categorize_transactions',
     description:
-      'Associa uma categoria (já existente ou criada no mesmo lote) a lançamentos do extrato filtrados por texto na descrição (`descriptionContains`) ou por `transactionIds`. Pode ser chamada várias vezes no mesmo turno para classificar em lote.',
+      'Associa uma categoria a lançamentos do extrato filtrados por texto na descrição (`descriptionContains`), por `transactionIds` e/ou por mês (ciclo mensal do usuário). Se a categoria não existir, ela é criada (o cartão de confirmação avisa). Só aplica a lançamentos do mesmo tipo da categoria (despesa ↔ EXPENSE, receita ↔ INCOME); transferências nunca são categorizadas. Pode ser chamada várias vezes no mesmo turno para classificar em lote.',
     parameters: {
       type: 'object',
       properties: {
@@ -50,6 +51,7 @@ export const CATEGORY_AND_CLASSIFICATION_TOOL_DECLARATIONS: ProviderToolDeclarat
         month: { type: 'integer', description: 'Mês opcional (1-12) para restringir a busca' },
         year: { type: 'integer', description: 'Ano opcional (ex.: 2026)' },
         onlyUncategorized: { type: 'boolean', description: 'Se true (padrão), altera apenas lançamentos ainda sem categoria' },
+        rememberForFuture: { type: 'boolean', description: 'Se true (padrão), memoriza a classificação para que futuras importações de extrato com descrição semelhante já venham nesta categoria.' },
       },
       required: ['categoryName'],
     },

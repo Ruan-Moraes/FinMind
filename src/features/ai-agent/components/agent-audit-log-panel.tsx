@@ -13,6 +13,7 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   ROLLED_BACK: { label: 'Desfeita', tone: 'text-amber-600 dark:text-amber-400' },
   AWAITING_CONFIRMATION: { label: 'Aguardando confirmação', tone: 'text-indigo-600 dark:text-indigo-400' },
   EXECUTING: { label: 'Executando', tone: 'text-indigo-600 dark:text-indigo-400' },
+  ROLLING_BACK: { label: 'Desfazendo', tone: 'text-amber-600 dark:text-amber-400' },
   PLANNED: { label: 'Planejada', tone: 'text-slate-500 dark:text-zinc-400' },
 };
 

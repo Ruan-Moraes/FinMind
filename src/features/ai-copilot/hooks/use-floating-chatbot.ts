@@ -47,6 +47,8 @@ export function useFloatingChatbot() {
   const [isLoading, setIsLoading] = React.useState(false);
   const [messages, setMessages] = React.useState<ChatEntry[]>([]);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  // Operações em andamento por auditLogId: cliques repetidos (duplo clique) são ignorados.
+  const inFlightRef = React.useRef(new Set<string>());
 
   const refreshSessions = React.useCallback(async () => {
     setIsLoadingSessions(true);
@@ -194,6 +196,8 @@ export function useFloatingChatbot() {
   };
 
   const handleConfirmMutation = async (msgId: string, mutation: PendingAgentMutation) => {
+    if (inFlightRef.current.has(mutation.auditLogId)) return;
+    inFlightRef.current.add(mutation.auditLogId);
     updateMsgMutationState(msgId, { status: 'RUNNING' });
     try {
       if (mutation.postConfirmVisualSteps.length > 0) {
@@ -203,15 +207,19 @@ export function useFloatingChatbot() {
       runtime.setStatus('VERIFYING');
       const res = await confirmAndExecuteAgentAction(mutation.auditLogId);
       runtime.setStatus('IDLE');
-      if (res.ok && res.verified) {
+      if (res.ok) {
+        // ok sem verified = lote parcial: algo foi gravado, então o Desfazer precisa continuar disponível.
         updateMsgMutationState(msgId, { status: 'SUCCEEDED', resultText: res.summary });
         router.refresh();
       } else {
-        updateMsgMutationState(msgId, { status: 'FAILED', resultText: !res.ok ? res.error : 'Não foi possível confirmar a gravação no banco.' });
+        updateMsgMutationState(msgId, { status: 'FAILED', resultText: res.error });
+        router.refresh();
       }
     } catch {
       runtime.setStatus('IDLE');
       updateMsgMutationState(msgId, { status: 'FAILED', resultText: 'Erro de comunicação ao confirmar a operação.' });
+    } finally {
+      inFlightRef.current.delete(mutation.auditLogId);
     }
   };
 
@@ -225,13 +233,18 @@ export function useFloatingChatbot() {
   };
 
   const handleRollbackMutation = async (msgId: string, mutation: PendingAgentMutation) => {
+    if (inFlightRef.current.has(mutation.auditLogId)) return;
+    inFlightRef.current.add(mutation.auditLogId);
     updateMsgMutationState(msgId, { status: 'RUNNING' });
     try {
       const res = await rollbackAgentExecutionAction(mutation.auditLogId);
       if (res.ok) { updateMsgMutationState(msgId, { status: 'ROLLED_BACK', resultText: res.summary }); router.refresh(); }
-      else updateMsgMutationState(msgId, { status: 'FAILED', resultText: res.summary });
+      // A operação original continua gravada: mantém o estado concluído para permitir nova tentativa.
+      else updateMsgMutationState(msgId, { status: 'SUCCEEDED', resultText: res.summary });
     } catch {
-      updateMsgMutationState(msgId, { status: 'FAILED', resultText: 'Erro de comunicação ao desfazer a operação.' });
+      updateMsgMutationState(msgId, { status: 'SUCCEEDED', resultText: 'Erro de comunicação ao desfazer a operação. Tente novamente.' });
+    } finally {
+      inFlightRef.current.delete(mutation.auditLogId);
     }
   };
 

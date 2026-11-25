@@ -204,6 +204,7 @@ export const READ_ANALYTICS_TOOL_NAMES = new Set([
   'query_static_rules',
   'query_credit_card_invoices',
   'query_categories',
+  'query_health_reports',
   'query_financial_overview',
   'query_portfolio_goals',
   'query_expenses_and_transactions',

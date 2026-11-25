@@ -6,17 +6,17 @@
 
 ## 1. Onde a IA Atua na Aplicação
 
-A IA atua em **4 fluxos independentes**, todos com fallback seguro caso não haja chave externa configurada:
+A IA atua em **5 fluxos independentes**, todos com fallback seguro caso não haja chave externa configurada:
 
 ```mermaid
 flowchart TD
   User["Usuário no FinMind"]
 
-  subgraph F1["1. Chatbot Flutuante (Todas as Abas)"]
+  subgraph F1["1. Agente IA no Chat Flutuante (Todas as Abas)"]
     ChatUI["FloatingAiChatbot + Histórico Persistido"]
-    Orch["assistant-orchestrator.ts"]
-    Charts["assistant-chart-builder.ts (Gráficos Reais)"]
-    ChatUI --> Orch --> Charts
+    Orch["agent-orchestrator.ts → agent-react-loop.ts"]
+    Tools["Ferramentas reais (leitura, UI e mutações com confirmação)"]
+    ChatUI --> Orch --> Tools
   end
 
   subgraph F2["2. Conciliação de Extratos Bancários"]
@@ -35,11 +35,18 @@ flowchart TD
     Health["FinancialHealthReportsPanel + AiAnalysisReport"]
   end
 
+  subgraph F5["5. Entrada por Voz"]
+    Voice["/api/ai/transcribe (Whisper / Gemini) + refineVoiceTranscriptAction"]
+  end
+
   User --> F1
   User --> F2
   User --> F3
   User --> F4
+  User --> F5
 ```
+
+> O antigo "assistente RAG" (`assistant-orchestrator.ts`, `sendAiChatMessageAction`, síntese determinística e gráficos montados no servidor) foi **removido** e substituído pelo Agente IA (seção 6). Restam apenas os tipos `AssistantStructuredResponse`/`AssistantChartSpec`, usados para reabrir conversas antigas do histórico.
 
 ---
 
@@ -98,40 +105,44 @@ Quando o usuário usa Claude (que não possui endpoint de embeddings) ou opera s
 
 ---
 
-## 3. Recuperação Híbrida, Gráficos Dinâmicos e Resposta Sem Alucinação
+## 3. Como o Agente Responde (Turno do Chat)
 
-Quando o usuário envia uma mensagem no **Chatbot Flutuante** (`sendAiChatMessageAction` → `executeContextualFinancialAssistant`):
+Quando o usuário envia uma mensagem no **Chat Flutuante** (`planAgentTurnAction` → `runAgentPlanningTurn`):
 
 ```mermaid
 flowchart TD
-  Q["Pergunta do Usuário + Sessão (AiChatSession)"]
-  SaveU["Salva mensagem do usuário em AiChatMessage"]
-  Sync["syncUserFinancialKnowledge() (atualiza deltas via contentHash)"]
-  Retr["retrieveFinancialContextForQuery()"]
-  Score["Score Híbrido por Chunk:<br/>0.55 × Cosseno Vetorial<br/>+ 0.45 × Overlap Léxico<br/>+ Boost Temporal/Intenção (Mês, Meta, Fixo, Orçamento)"]
-  Sanitize["Sanitização Anti-Prompt Injection (Top 15 chunks)"]
-  Det["Síntese Determinística (deterministic-synthesis.ts)<br/>Cálculos 100% exatos em centavos"]
-  Charts["assistant-chart-builder.ts<br/>Gera KPIs, Donut, Barras 6m e Progresso de Metas"]
-  LLM{"Chave externa ativa?<br/>(OpenAI / Gemini / Claude)"}
-  LiveCall["callProviderApiJson() com prompt aterrado nos números exatos"]
-  Fallback["Usa resposta estruturada determinística local"]
-  SaveA["Persiste resposta + charts em AiChatMessage.responseJson"]
-  Render["FloatingChatMessage renderiza texto + Recharts interativos"]
+  Q["Mensagem + Estado da UI (aba, período, modal)"]
+  Guard["Guarda de Segurança (reset geral, senha, chaves de API → BLOCKED)"]
+  Ctx["Contexto: top-5 trechos da Base de Conhecimento do sistema + 8 últimas mensagens da sessão"]
+  LLM{"Chave + modelo selecionados?"}
+  Loop["Loop ReAct (até 4 rodadas): o modelo chama ferramentas"]
+  Read["Leitura (query_*, compare_*, search_financial_history...) → dados reais do banco"]
+  Prep["Mutações → preparePreview (nada é gravado): retorna 'prepared' ou o erro real ao modelo"]
+  Render["render_visual_content → gráficos/tabelas com valores das consultas"]
+  Valid["Validador de intenção (1 retry de correção)"]
+  Local["Motor local: regras determinísticas (navegação, guias, filtros, preferências, criar meta) + análise local"]
+  Card["Cartão de confirmação Antes → Depois (AgentActionAuditLog = AWAITING_CONFIRMATION)"]
+  Save["Persiste mensagem + payload em AiChatMessage"]
 
-  Q --> SaveU --> Sync --> Retr --> Score --> Sanitize
-  Sanitize --> Det
-  Sanitize --> Charts
-  Det --> LLM
-  LLM -- "Sim (sucesso)" --> LiveCall --> SaveA
-  LLM -- "Não ou erro HTTP/cota" --> Fallback --> SaveA
-  Charts --> SaveA --> Render
+  Q --> Guard --> Ctx --> LLM
+  LLM -- "Sim" --> Loop
+  Loop --> Read --> Loop
+  Loop --> Prep --> Loop
+  Loop --> Render --> Valid
+  LLM -- "Não ou erro do provedor" --> Local
+  Valid --> Card --> Save
+  Local --> Save
 ```
 
 ### Garantias de Precisão e Confiabilidade
-1. **Isolamento Multi-Tenant:** todas as queries RAG filtram obrigatoriamente por `where: { userId }`.
-2. **Gráficos 100% Reais:** os dados dos gráficos dinâmicos (`kpi_strip`, `donut`, `bar_comparison`, `progress_bars`) são construídos diretamente no servidor por `assistant-chart-builder.ts` a partir do banco — o LLM **nunca inventa números de gráfico**.
-3. **Separação Estrutural:** cada resposta separa explicitamente **Fatos Históricos**, **Cálculos Exatos**, **Projeções & Estimativas** e **Recomendações Práticas**, exibindo as fontes consultadas.
-4. **Histórico Persistido:** cada nova conversa grava uma `AiChatSession` com título automático e salva todas as mensagens (`AiChatMessage`) incluindo o JSON completo da resposta e dos gráficos, permitindo reabrir e consultar depois.
+1. **Isolamento Multi-Tenant:** toda leitura e escrita filtra por `userId`; a busca semântica (`FinancialKnowledgeChunk`) também.
+2. **Números reais:** o modelo só monta gráficos via `render_visual_content` depois de consultar ferramentas de leitura; o validador força uma correção quando isso não acontece.
+3. **Nada é salvo sem confirmação:** mutações L2/L3 geram apenas um plano. Recusas de preparo (nome inexistente/ambíguo, duplicidade, campos faltando) voltam ao modelo como resultado da ferramenta e **sempre** aparecem na resposta ao usuário.
+4. **Edição parcial:** nas edições, campos que o usuário não citou são mantidos (dia da regra fixa, cartão vinculado, bandeira do cartão, tipo da conta, prazo da meta etc.).
+5. **Histórico Persistido:** cada conversa grava uma `AiChatSession` e todas as mensagens (`AiChatMessage`), incluindo o payload completo do turno.
+
+### Sem chave de API
+Sem provedor conectado, o agente funciona em **modo local**: responde saudações, navega, abre guias e capturas, aplica filtros, altera preferências, cria metas de carteira simples e faz análises locais com os dados reais. **Criar/editar lançamentos, regras, orçamentos, contas, cartões e demais alterações exige um provedor de IA conectado.**
 
 ---
 
@@ -171,7 +182,9 @@ O FinMind evoluiu o assistente para um **Agente Autônomo Interativo** integrado
 
 1. **Base de Conhecimento Versionada (`docs/knowledge/*.md`) + RAG Dual:**
    - Documentos modulares em Markdown (telas, fluxos, regras de negócio, validações e erros) indexados por SHA-256 nas tabelas `SystemKnowledgeDocument` e `SystemKnowledgeChunk` (`pnpm kb:validate` / `pnpm kb:sync`).
-   - Busca híbrida (cosseno vetorial + BM25 léxico + boost pela aba ativa) combinada ao `FinancialKnowledgeChunk` isolado por `userId`.
+   - Busca híbrida (cosseno sobre o vetor local `financial-semantic-v1` + proporção de termos da pergunta presentes no trecho + boost pela aba ativa). Os 5 melhores trechos entram no prompt como conteúdo não confiável.
+   - A base é sincronizada automaticamente quando o hash dos arquivos em disco difere do banco.
+   - O histórico financeiro do usuário (`FinancialKnowledgeChunk`) **não** entra automaticamente no prompt: o agente o consulta sob demanda com a ferramenta `search_financial_history`.
 2. **Percepção da Interface (`UiStateSnapshot`) & Registro Semântico (`data-agent-id`):**
    - Cada turno envia aba ativa, período, modal aberto, filtros, tema e alvos montados no DOM (`agent-target-registry.ts`), sem depender de coordenadas fixas ou seletores frágeis.
 3. **Tool Calling Multi-Provedor (`agent-tool-provider-client.ts`):**
@@ -182,4 +195,6 @@ O FinMind evoluiu o assistente para um **Agente Autônomo Interativo** integrado
 5. **Captura Real e Anotação de Telas (`modern-screenshot` + `CanvasAnnotator`):**
    - Captura o estado real renderizado da interface (tema, dados e modais atuais), oculta automaticamente elementos sensíveis (`data-agent-sensitive`) ou respeita o Modo Privacidade, e desenha caixas de destaque e etapas numeradas exibidas inline no chat com zoom.
 6. **Governança, Confirmação Prévia, Verificação e Rollback (`AgentActionAuditLog`):**
-   - Matriz de risco `L0`/`L1` (imediato), `L2`/`L3` (confirmação prévia com diff *Antes → Depois*, idempotência, verificação real no banco pós-persistência e botão **Desfazer**) e `BLOCKED` (Reset Geral e credenciais bloqueados para execução autônoma).
+   - Matriz de risco `L0`/`L1` (imediato), `L2`/`L3` (confirmação prévia com diff *Antes → Depois*, trava contra clique duplo, verificação real no banco pós-persistência e botão **Desfazer**) e `BLOCKED` (Reset Geral e credenciais bloqueados para execução autônoma).
+   - Estados: `AWAITING_CONFIRMATION → EXECUTING → SUCCEEDED | FAILED`, e `SUCCEEDED → ROLLING_BACK → ROLLED_BACK`. Um lote com etapas falhas que gravou parte das ações fica `SUCCEEDED` (com a falha anotada), para que o **Desfazer** reverta o que foi salvo.
+   - Ferramenta desconhecida citada pelo modelo é ignorada (com aviso) sem derrubar as demais ações do turno.

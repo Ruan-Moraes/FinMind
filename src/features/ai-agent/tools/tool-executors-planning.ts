@@ -1,7 +1,9 @@
+import { z } from 'zod';
 import { prisma } from '@/shared/lib/prisma';
 import { formatCentsToBRL, MONTH_NAMES_PT } from '@/shared/lib/currency';
 import { upsertStaticRuleToolSchema } from '@/features/ai-agent/tools/tool-catalog';
 import {
+  deleteBalanceTargetToolSchema,
   deleteBudgetToolSchema,
   deleteStaticRuleToolSchema,
   deleteValueForecastToolSchema,
@@ -15,6 +17,7 @@ import {
   resolveActiveAccount,
   resolveByName,
   resolveCategory,
+  resolveCreditCard,
 } from '@/features/ai-agent/tools/entity-resolvers';
 import type { AgentToolExecutor } from '@/features/ai-agent/tools/tool-executor-types';
 import {
@@ -40,17 +43,57 @@ async function findRuleOrThrow(userId: string, matchDescription: string) {
 }
 
 /* ───────────── upsert_static_rule (cria ou edita) ───────────── */
+const resolvedStaticRuleSchema = z.object({
+  description: z.string().trim().min(1),
+  type: z.enum(['INCOME', 'EXPENSE']),
+  amountBRL: z.coerce.number().positive(),
+  dayOfMonth: z.coerce.number().int().min(1).max(31),
+  dayType: z.enum(['CALENDAR_DAY', 'BUSINESS_DAY']),
+  includeSaturday: z.boolean(),
+});
+
+const ruleDayLabel = (dayType: string, day: number) => (dayType === 'BUSINESS_DAY' ? `${day}º dia útil` : `Dia ${day}`);
+
 export const upsertStaticRuleExecutor: AgentToolExecutor = {
   async preparePreview(userId, rawArgs) {
     const parsed = upsertStaticRuleToolSchema.parse(rawArgs);
-    const cents = brlToCents(parsed.amountBRL);
     const existing = parsed.matchDescription ? await findRuleOrThrow(userId, parsed.matchDescription) : null;
-    const category = parsed.categoryName ? await resolveCategory(userId, parsed.categoryName, parsed.type) : null;
-    const account = parsed.accountName ? await resolveActiveAccount(userId, parsed.accountName) : null;
 
     if (!existing) {
-      const dup = await prisma.recurrenceRule.findMany({ where: { userId, type: parsed.type } });
-      const same = dup.find((r) => normalizeName(r.description) === normalizeName(parsed.description));
+      const missing = [
+        !parsed.description && 'description',
+        !parsed.type && 'type (INCOME ou EXPENSE)',
+        parsed.amountBRL === undefined && 'amountBRL',
+      ].filter(Boolean);
+      if (missing.length > 0) {
+        throw new Error(`Para criar a regra fixa, faltam: ${missing.join(', ')}. Para editar uma regra existente, informe matchDescription.`);
+      }
+    }
+
+    // Mescla: campo omitido na edição mantém o valor atual (nunca volta ao padrão).
+    const merged = resolvedStaticRuleSchema.parse({
+      description: parsed.description ?? existing?.description,
+      type: parsed.type ?? existing?.type,
+      amountBRL: parsed.amountBRL ?? (existing ? existing.amountInCents / 100 : undefined),
+      dayOfMonth: parsed.dayOfMonth ?? existing?.dayOfMonth ?? 5,
+      dayType: parsed.dayType ?? existing?.dayType ?? 'CALENDAR_DAY',
+      includeSaturday: parsed.includeSaturday ?? existing?.includeSaturday ?? false,
+    });
+    if (merged.dayType === 'BUSINESS_DAY' && merged.dayOfMonth > 23) {
+      throw new Error('Para dia útil, o limite é do 1º ao 23º dia útil do mês.');
+    }
+    if (parsed.cardName && merged.type !== 'EXPENSE') {
+      throw new Error('Somente custos fixos (EXPENSE) podem ser vinculados a um cartão de crédito.');
+    }
+
+    const cents = brlToCents(merged.amountBRL);
+    const category = parsed.categoryName ? await resolveCategory(userId, parsed.categoryName, merged.type) : null;
+    const account = parsed.accountName ? await resolveActiveAccount(userId, parsed.accountName) : null;
+    const card = parsed.cardName ? await resolveCreditCard(userId, parsed.cardName) : null;
+
+    if (!existing) {
+      const dup = await prisma.recurrenceRule.findMany({ where: { userId, type: merged.type } });
+      const same = dup.find((r) => normalizeName(r.description) === normalizeName(merged.description));
       if (same) {
         throw new Error(
           `Já existe uma regra fixa "${same.description}" (${formatCentsToBRL(same.amountInCents)}). Para alterá-la, peça a edição informando o nome atual; para outra regra, use uma descrição diferente.`
@@ -58,38 +101,49 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
       }
     }
 
-    const isIncome = parsed.type === 'INCOME';
-    const dayLabel = parsed.dayType === 'BUSINESS_DAY' ? `${parsed.dayOfMonth}º dia útil` : `Dia ${parsed.dayOfMonth}`;
+    const keepCardId = merged.type === 'EXPENSE' && !parsed.removeCard ? existing?.creditCardId ?? null : null;
+    const resolvedCardId = card?.id ?? keepCardId;
+    const resolvedCategoryId = category?.id ?? existing?.categoryId ?? null;
+    const resolvedAccountId = account?.id ?? existing?.accountId ?? null;
+    const currentCard = existing?.creditCardId
+      ? await prisma.creditCard.findFirst({ where: { id: existing.creditCardId, userId }, select: { name: true } })
+      : null;
+    const finalCardName = card?.name ?? (resolvedCardId ? currentCard?.name : null);
+
+    const isIncome = merged.type === 'INCOME';
+    const dayLabel = ruleDayLabel(merged.dayType, merged.dayOfMonth);
     const label = isIncome ? 'Ganho Estático' : 'Custo Estático';
 
     return {
-      title: existing ? `Editar ${label}: ${existing.description}` : `Novo ${label}: ${parsed.description}`,
+      title: existing ? `Editar ${label}: ${existing.description}` : `Novo ${label}: ${merged.description}`,
       summary: existing
-        ? `Atualizar a regra "${existing.description}" para ${formatCentsToBRL(cents)} (${dayLabel}).`
-        : `Cadastrar ${isIncome ? 'ganho fixo' : 'custo fixo'} "${parsed.description}" de ${formatCentsToBRL(cents)} (${dayLabel}).`,
+        ? `Atualizar a regra "${existing.description}" para ${formatCentsToBRL(cents)} (${dayLabel}${finalCardName ? ` • cartão ${finalCardName}` : ''}).`
+        : `Cadastrar ${isIncome ? 'ganho fixo' : 'custo fixo'} "${merged.description}" de ${formatCentsToBRL(cents)} (${dayLabel}${finalCardName ? ` • cartão ${finalCardName}` : ''}).`,
       beforePreview: existing
         ? [
             { label: 'Descrição', value: existing.description },
             { label: 'Valor', value: formatCentsToBRL(existing.amountInCents) },
-            { label: 'Vencimento', value: existing.dayType === 'BUSINESS_DAY' ? `${existing.dayOfMonth}º dia útil` : `Dia ${existing.dayOfMonth}` },
+            { label: 'Vencimento', value: ruleDayLabel(existing.dayType, existing.dayOfMonth) },
+            ...(currentCard ? [{ label: 'Cartão', value: currentCard.name }] : []),
           ]
         : [{ label: 'Linha de base fixa', value: 'Nova regra mensal' }],
       afterPreview: [
-        { label: 'Descrição', value: parsed.description },
+        { label: 'Descrição', value: merged.description },
         { label: 'Valor', value: formatCentsToBRL(cents) },
         { label: 'Vencimento', value: dayLabel },
         ...(category ? [{ label: 'Categoria', value: category.name }] : []),
         ...(account ? [{ label: 'Conta', value: account.name }] : []),
+        ...(finalCardName ? [{ label: 'Cartão', value: finalCardName }] : existing?.creditCardId ? [{ label: 'Cartão', value: 'Desvinculado' }] : []),
       ],
       beforeState: existing
-        ? { action: 'UPDATE', id: existing.id, description: existing.description, type: existing.type, nature: existing.nature, amountInCents: existing.amountInCents, dayOfMonth: existing.dayOfMonth, dayType: existing.dayType, includeSaturday: existing.includeSaturday, categoryId: existing.categoryId, accountId: existing.accountId }
+        ? { action: 'UPDATE', id: existing.id, description: existing.description, type: existing.type, nature: existing.nature, amountInCents: existing.amountInCents, dayOfMonth: existing.dayOfMonth, dayType: existing.dayType, includeSaturday: existing.includeSaturday, categoryId: existing.categoryId, accountId: existing.accountId, creditCardId: existing.creditCardId }
         : { action: 'CREATE' },
-      normalizedParams: { ...parsed, existingId: existing?.id ?? null, resolvedCategoryId: category?.id ?? null, resolvedAccountId: account?.id ?? null },
+      normalizedParams: { ...merged, existingId: existing?.id ?? null, resolvedCategoryId, resolvedAccountId, resolvedCardId },
       postConfirmVisualSteps: [
         { id: 's1', action: 'SWITCH_TAB', tab: 'goals', targetId: 'nav.tab.goals', caption: 'Navegando para Custos & Ganhos Estáticos' },
         {
-          id: 's2', action: 'SCROLL_TO', targetId: 'goals.table.staticRules', caption: `Salvando regra "${parsed.description}"`,
-          tooltipTitle: label, tooltipBody: `Registrando "${parsed.description}" (${formatCentsToBRL(cents)} • ${dayLabel}).`, tone: 'emerald', pauseMs: 650,
+          id: 's2', action: 'SCROLL_TO', targetId: 'goals.table.staticRules', caption: `Salvando regra "${merged.description}"`,
+          tooltipTitle: label, tooltipBody: `Registrando "${merged.description}" (${formatCentsToBRL(cents)} • ${dayLabel}).`, tone: 'emerald', pauseMs: 650,
         },
       ],
       reversible: true,
@@ -97,11 +151,13 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
   },
 
   async executeAndVerify(userId, params) {
-    const parsed = upsertStaticRuleToolSchema.parse(params);
+    const parsed = resolvedStaticRuleSchema.parse(params);
     const existingId = typeof params.existingId === 'string' ? params.existingId : undefined;
     const before = existingId ? await prisma.recurrenceRule.findFirst({ where: { id: existingId, userId } }) : null;
     if (existingId && !before) return { ok: false, verified: false, summary: 'Regra não encontrada.', error: 'Regra não encontrada.' };
 
+    // Planos antigos (sem resolvedCardId) preservam o cartão atual da regra.
+    const cardId = 'resolvedCardId' in params ? (params.resolvedCardId as string | null) : before?.creditCardId ?? null;
     const res = await saveRecurrenceRuleForUser(userId, {
       id: before?.id,
       description: parsed.description,
@@ -113,6 +169,7 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
       includeSaturday: parsed.includeSaturday,
       categoryId: (params.resolvedCategoryId as string) || before?.categoryId || undefined,
       accountId: (params.resolvedAccountId as string) || before?.accountId || undefined,
+      creditCardId: cardId || undefined,
     });
     if (!res.ok) return { ok: false, verified: false, summary: res.error, error: res.error };
 
@@ -120,7 +177,12 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
       where: before ? { id: before.id, userId } : { userId, description: parsed.description, type: parsed.type },
       orderBy: { createdAt: 'desc' },
     });
-    const verified = Boolean(row && row.amountInCents === brlToCents(parsed.amountBRL));
+    const verified = Boolean(
+      row &&
+        row.amountInCents === brlToCents(parsed.amountBRL) &&
+        row.dayOfMonth === parsed.dayOfMonth &&
+        (row.creditCardId ?? null) === (parsed.type === 'EXPENSE' ? cardId || null : null)
+    );
     return {
       ok: verified,
       verified,
@@ -132,7 +194,7 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
   },
 
   async rollback(userId, beforeState, afterState) {
-    const before = beforeState as { action?: string; id?: string; description?: string; type?: string; nature?: string; amountInCents?: number; dayOfMonth?: number; dayType?: string; includeSaturday?: boolean; categoryId?: string | null; accountId?: string | null } | null;
+    const before = beforeState as { action?: string; id?: string; description?: string; type?: string; nature?: string; amountInCents?: number; dayOfMonth?: number; dayType?: string; includeSaturday?: boolean; categoryId?: string | null; accountId?: string | null; creditCardId?: string | null } | null;
     const after = afterState as { id?: string } | null;
     if (before?.action === 'UPDATE' && before.id) {
       await prisma.recurrenceRule.updateMany({
@@ -141,6 +203,7 @@ export const upsertStaticRuleExecutor: AgentToolExecutor = {
           description: before.description, type: before.type, nature: before.nature, amountInCents: before.amountInCents,
           dayOfMonth: before.dayOfMonth, dayType: before.dayType, includeSaturday: before.includeSaturday,
           categoryId: before.categoryId ?? null, accountId: before.accountId ?? null,
+          ...('creditCardId' in before ? { creditCardId: before.creditCardId ?? null } : {}),
         },
       });
       await syncRag(userId);
@@ -186,6 +249,8 @@ export const deleteStaticRuleExecutor: AgentToolExecutor = {
         dayOfMonth: Number(r.dayOfMonth), dayType: String(r.dayType), includeSaturday: Boolean(r.includeSaturday),
         skippedMonths: String(r.skippedMonths ?? '[]'), monthlyOverrides: String(r.monthlyOverrides ?? '{}'),
         categoryId: (r.categoryId as string) || null, accountId: (r.accountId as string) || null,
+        creditCardId: (r.creditCardId as string) || null, isActive: r.isActive === undefined ? true : Boolean(r.isActive),
+        frequency: String(r.frequency ?? 'MONTHLY'),
       },
     });
     await syncRag(userId);
@@ -404,46 +469,71 @@ export const deleteValueForecastExecutor: AgentToolExecutor = {
   },
 };
 
+const resolvedBalanceTargetSchema = z.object({
+  title: z.string().trim().min(1),
+  plannedBalanceBRL: z.coerce.number().positive(),
+  targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: z.string().optional(),
+});
+
 export const upsertBalanceTargetExecutor: AgentToolExecutor = {
   async preparePreview(userId, rawArgs) {
     const parsed = upsertBalanceTargetToolSchema.parse(rawArgs);
+    const targets = await prisma.balanceTargetCheck.findMany({ where: { userId } });
     const existing = parsed.matchTitle
-      ? resolveByName(
-          (await prisma.balanceTargetCheck.findMany({ where: { userId } })).map((t) => ({ ...t, name: t.title })),
-          parsed.matchTitle,
-          'meta de saldo'
-        )
+      ? resolveByName(targets.map((t) => ({ ...t, name: t.title })), parsed.matchTitle, 'meta de saldo')
       : null;
-    const cents = brlToCents(parsed.plannedBalanceBRL);
+    if (!existing) {
+      const missing = [
+        !parsed.title && 'title',
+        parsed.plannedBalanceBRL === undefined && 'plannedBalanceBRL',
+        !parsed.targetDate && 'targetDate',
+      ].filter(Boolean);
+      if (missing.length > 0) throw new Error(`Para criar a meta de saldo, faltam: ${missing.join(', ')}. Para editar uma existente, informe matchTitle.`);
+    }
+    // Na edição, campos omitidos (inclusive observações) mantêm o valor atual.
+    const merged = resolvedBalanceTargetSchema.parse({
+      title: parsed.title ?? existing?.title,
+      plannedBalanceBRL: parsed.plannedBalanceBRL ?? (existing ? existing.plannedBalanceInCents / 100 : undefined),
+      targetDate: parsed.targetDate ?? existing?.targetDate.toISOString().slice(0, 10),
+      notes: parsed.notes ?? existing?.notes ?? undefined,
+    });
+    const cents = brlToCents(merged.plannedBalanceBRL);
     return {
-      title: existing ? `Alterar Meta de Saldo: ${existing.title}` : `Nova Meta de Saldo: ${parsed.title}`,
-      summary: `Ter ${formatCentsToBRL(cents)} acumulados em ${parsed.targetDate}.`,
+      title: existing ? `Alterar Meta de Saldo: ${existing.title}` : `Nova Meta de Saldo: ${merged.title}`,
+      summary: `Ter ${formatCentsToBRL(cents)} acumulados em ${merged.targetDate}.`,
       beforePreview: existing
         ? [{ label: 'Meta', value: `${formatCentsToBRL(existing.plannedBalanceInCents)} em ${existing.targetDate.toISOString().slice(0, 10)}` }]
         : [{ label: 'Metas de saldo', value: 'Nova meta' }],
       afterPreview: [
-        { label: 'Título', value: parsed.title },
+        { label: 'Título', value: merged.title },
         { label: 'Saldo desejado', value: formatCentsToBRL(cents) },
-        { label: 'Data', value: parsed.targetDate },
+        { label: 'Data', value: merged.targetDate },
       ],
       beforeState: existing ? { action: 'UPDATE', id: existing.id, title: existing.title, plannedBalanceInCents: existing.plannedBalanceInCents, targetDate: existing.targetDate.toISOString(), notes: existing.notes } : { action: 'CREATE' },
-      normalizedParams: { ...parsed, existingId: existing?.id ?? null },
+      normalizedParams: { ...merged, existingId: existing?.id ?? null },
       postConfirmVisualSteps: [
         { id: 't1', action: 'SWITCH_TAB', tab: 'forecast', targetId: 'nav.tab.forecast', caption: 'Abrindo Previsão de Valor' },
-        { id: 't2', action: 'HIGHLIGHT', targetId: 'forecast.btn.addTarget', caption: `Meta de saldo "${parsed.title}"`, pauseMs: 400 },
+        { id: 't2', action: 'HIGHLIGHT', targetId: 'forecast.btn.addTarget', caption: `Meta de saldo "${merged.title}"`, pauseMs: 400 },
       ],
       reversible: true,
     };
   },
   async executeAndVerify(userId, params) {
-    const parsed = upsertBalanceTargetToolSchema.parse(params);
+    const parsed = resolvedBalanceTargetSchema.parse(params);
     const cents = brlToCents(parsed.plannedBalanceBRL);
     const targetDate = new Date(`${parsed.targetDate}T12:00:00.000Z`);
     const existingId = typeof params.existingId === 'string' ? params.existingId : null;
-    const saved = existingId
-      ? await prisma.balanceTargetCheck.update({ where: { id: existingId }, data: { title: parsed.title, plannedBalanceInCents: cents, targetDate, notes: parsed.notes ?? null } })
-      : await prisma.balanceTargetCheck.create({ data: { userId, title: parsed.title, plannedBalanceInCents: cents, targetDate, notes: parsed.notes ?? null } });
-    const row = await prisma.balanceTargetCheck.findFirst({ where: { id: saved.id, userId } });
+    const data = { title: parsed.title, plannedBalanceInCents: cents, targetDate, notes: parsed.notes ?? null };
+    let savedId: string;
+    if (existingId) {
+      const res = await prisma.balanceTargetCheck.updateMany({ where: { id: existingId, userId }, data });
+      if (res.count === 0) return { ok: false, verified: false, summary: 'Meta de saldo não encontrada.', error: 'Não encontrada.' };
+      savedId = existingId;
+    } else {
+      savedId = (await prisma.balanceTargetCheck.create({ data: { userId, ...data } })).id;
+    }
+    const row = await prisma.balanceTargetCheck.findFirst({ where: { id: savedId, userId } });
     const verified = row?.plannedBalanceInCents === cents;
     return { ok: verified, verified, summary: verified ? `Meta de saldo "${parsed.title}" salva e verificada.` : 'Não foi possível verificar a meta de saldo.', afterState: row };
   },
@@ -457,5 +547,39 @@ export const upsertBalanceTargetExecutor: AgentToolExecutor = {
     if (!a?.id) return { ok: false, summary: 'Meta de saldo não encontrada.' };
     await prisma.balanceTargetCheck.deleteMany({ where: { id: a.id, userId } });
     return { ok: true, summary: 'Meta de saldo recém-criada removida.' };
+  },
+};
+
+/* ───────────── delete_balance_target ───────────── */
+export const deleteBalanceTargetExecutor: AgentToolExecutor = {
+  async preparePreview(userId, rawArgs) {
+    const parsed = deleteBalanceTargetToolSchema.parse(rawArgs);
+    const targets = await prisma.balanceTargetCheck.findMany({ where: { userId }, orderBy: { targetDate: 'asc' } });
+    const t = resolveByName(targets.map((x) => ({ ...x, name: x.title })), parsed.matchTitle, 'meta de saldo');
+    const day = t.targetDate.toISOString().slice(0, 10);
+    return {
+      title: `Excluir Meta de Saldo: ${t.title}`,
+      summary: `Remover a meta de saldo "${t.title}" (${formatCentsToBRL(t.plannedBalanceInCents)} em ${day}).`,
+      beforePreview: [{ label: 'Meta de saldo', value: `${t.title} • ${formatCentsToBRL(t.plannedBalanceInCents)} em ${day}` }],
+      afterPreview: [{ label: 'Resultado', value: 'Meta de saldo excluída' }],
+      beforeState: { title: t.title, plannedBalanceInCents: t.plannedBalanceInCents, targetDate: t.targetDate.toISOString(), notes: t.notes },
+      normalizedParams: { targetId: t.id },
+      postConfirmVisualSteps: [{ id: 'bt1', action: 'SWITCH_TAB', tab: 'forecast', targetId: 'nav.tab.forecast', caption: 'Abrindo Previsão de Valor' }],
+      reversible: true,
+    };
+  },
+  async executeAndVerify(userId, params) {
+    const id = String(params.targetId || '');
+    await prisma.balanceTargetCheck.deleteMany({ where: { id, userId } });
+    const gone = !(await prisma.balanceTargetCheck.findFirst({ where: { id, userId } }));
+    return { ok: gone, verified: gone, summary: gone ? 'Meta de saldo excluída e ausência confirmada.' : 'Falha ao confirmar exclusão.', afterState: { deletedId: id } };
+  },
+  async rollback(userId, beforeState) {
+    const b = beforeState as { title?: string; plannedBalanceInCents?: number; targetDate?: string; notes?: string | null } | null;
+    if (!b?.title) return { ok: false, summary: 'Não foi possível restaurar a meta de saldo.' };
+    await prisma.balanceTargetCheck.create({
+      data: { userId, title: b.title, plannedBalanceInCents: Number(b.plannedBalanceInCents), targetDate: new Date(String(b.targetDate)), notes: b.notes ?? null },
+    });
+    return { ok: true, summary: `Meta de saldo "${b.title}" restaurada.` };
   },
 };

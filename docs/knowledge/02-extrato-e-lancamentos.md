@@ -1,7 +1,7 @@
 ---
 docId: transactions-and-ledger
 module: transactions
-version: 1.2.0
+version: 1.3.0
 screens: ["transactions", "modal:TX"]
 relatedTools: ["navigate_to_section", "apply_transaction_filters", "query_expenses_and_transactions", "create_transaction", "guide_feature_workflow", "capture_annotated_screen", "update_transaction", "delete_transaction", "query_categories", "categorize_transactions"]
 tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferencia", "parcelamento", "filtro", "comprovante"]
@@ -34,5 +34,6 @@ tags: ["extrato", "lancamento", "transacao", "despesa", "receita", "transferenci
 
 ## O que o Agente IA pode fazer aqui
 - **Criar** lançamento (`create_transaction`): receita, despesa, **transferência** (conta de origem + destino), despesa em **cartão** (com `installments` de 1 a 48) e `status` PENDING/COMPLETED. Se a conta, o cartão ou a categoria citados **não existirem** (ou forem ambíguos), o agente recusa e lista as opções; nunca grava em outra conta por aproximação.
-- **Editar** (`update_transaction`) e **excluir** (`delete_transaction`) um lançamento localizado por ID ou por descrição (+ data/valor). Compras parceladas não são editadas pelo agente (apenas excluídas, com a série inteira); para editar parcelas use a tela de Extrato.
+- **Editar** (`update_transaction`) e **excluir** (`delete_transaction`) um lançamento localizado por ID ou por descrição (+ data/valor), em todo o histórico. Compras parceladas não são editadas pelo agente; para editar parcelas use a tela de Extrato. Na exclusão, o padrão remove **somente a parcela indicada** (o cartão de confirmação avisa); para remover a compra inteira, peça "todas as parcelas" (`deleteInstallmentSeries`). Ao desfazer, a parcela volta para a mesma compra parcelada.
 - Sem categoria informada, o lançamento usa a categoria sugerida pelas regras aprendidas (memória de conciliação) ou fica **sem categoria** — o agente não escolhe uma categoria arbitrária.
+- **Classificar em lote** (`categorize_transactions`): por trecho da descrição, IDs ou mês (no ciclo mensal do usuário). Só aplica a lançamentos do mesmo tipo da categoria (despesa ↔ categoria de gasto, receita ↔ categoria de ganho); transferências nunca recebem categoria. Se a categoria não existir, o cartão avisa que ela será criada. Por padrão a classificação é **memorizada** para as próximas importações de extrato; ao desfazer, a memória e a categoria criada também são revertidas.

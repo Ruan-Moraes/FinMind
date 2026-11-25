@@ -175,7 +175,7 @@ erDiagram
         string theme "LIGHT | DARK | SYSTEM"
         string density "COMFORTABLE | COMPACT"
         boolean hideValuesByDefault
-        int fiscalMonthStartDay "1 a 31"
+        int fiscalMonthStartDay "1 a 28"
         string defaultAccountId FK "Nullable"
         datetime updatedAt
     }

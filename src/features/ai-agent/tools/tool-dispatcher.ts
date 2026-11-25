@@ -11,6 +11,7 @@ import {
   updateTransactionExecutor,
 } from '@/features/ai-agent/tools/tool-executors-transactions';
 import {
+  deleteBalanceTargetExecutor,
   deleteBudgetExecutor,
   deleteStaticRuleExecutor,
   deleteValueForecastExecutor,
@@ -26,6 +27,7 @@ import {
 } from '@/features/ai-agent/tools/tool-executors-accounts';
 import {
   categorizeTransactionsExecutor,
+  deleteCategoryExecutor,
   upsertCategoryExecutor,
 } from '@/features/ai-agent/tools/tool-executors-categories';
 import { createBatchMutationsExecutor } from '@/features/ai-agent/tools/tool-executors-batch';
@@ -50,6 +52,8 @@ const SINGLE_MUTATION_EXECUTORS: Record<string, AgentToolExecutor> = {
   upsert_account: upsertAccountExecutor,
   upsert_credit_card: upsertCreditCardExecutor,
   pay_credit_card_invoice: payCreditCardInvoiceExecutor,
+  delete_balance_target: deleteBalanceTargetExecutor,
+  delete_category: deleteCategoryExecutor,
 };
 
 const batchMutationsExecutor = createBatchMutationsExecutor(

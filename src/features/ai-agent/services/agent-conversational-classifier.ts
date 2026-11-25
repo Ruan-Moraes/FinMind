@@ -51,6 +51,24 @@ export function detectConversationalReply(message: string): string | null {
  * Identifica se a mensagem realmente pede análise ou consulta sobre os dados financeiros
  * do usuário (saldos, receitas, despesas, categorias, faturas, metas, gráficos, previsões).
  */
+/**
+ * Pedido de alteração (lançar, criar, editar, excluir, pagar, classificar...) que o motor local
+ * não sabe executar. Sem esta checagem, "lance uma despesa" caía na análise local e o usuário
+ * recebia um resumo do mês sem relação com o pedido.
+ */
+export function detectUnsupportedLocalMutation(message: string): string | null {
+  const norm = normalize(message);
+  const asksHow = /\b(como|onde|ensin[a-z]*|tutorial|passo a passo)\b/.test(norm);
+  if (asksHow) return null;
+  const isMutation =
+    /\b(lanc[a-z]*|registr[a-z]*|adicion[a-z]*|inclu[a-z]*|cri[ae][a-z]*|cadastr[a-z]*|edit[a-z]*|alter[a-z]*|atualiz[a-z]*|mud[ae][a-z]*|exclu[a-z]*|apag[a-z]*|remov[a-z]*|delet[a-z]*|pag(ue|ar|a)\b|quit[a-z]*|classifi[a-z]*|categoriz[a-z]*|transfir[a-z]*|transfer[ei][a-z]*|pul[ae]r?\b|reativ[a-z]*)\b/.test(norm);
+  if (!isMutation) return null;
+  return (
+    'Para fazer essa alteração eu preciso de um **provedor de IA conectado** — no modo local eu só navego, ensino, tiro fotos anotadas, aplico filtros, ajusto preferências e crio metas simples.\n\n' +
+    'Conecte ou corrija sua chave em **Copiloto IA & Extrato → Conector de Provedores** e peça de novo. Se preferir fazer manualmente agora, pergunte *"como faço isso?"* que eu mostro na tela.'
+  );
+}
+
 export function isFinancialAnalyticsQuery(message: string): boolean {
   const norm = normalize(message);
   return /\b(saldo|patrimonio|gast[a-z]*|despes[a-z]*|receit[a-z]*|ganh[a-z]*|categori[a-z]*|extrato|fatur[a-z]*|carta[oa]|cartoes|conta[s]?|meta[s]?|orcament[a-z]*|margem|economi[a-z]*|sobr[a-z]*|ritmo|evoluc[a-z]*|grafic[a-z]*|compar[a-z]*|relatori[a-z]*|diagnostic[a-z]*|quanto|total|balanco|resumo|panorama|analis[a-z]*|previs[a-z]*|dinheiro|caixa|renda|valor[a-z]*|custo[s]?|divida[s]?|parcela[s]?|pix|ifood|uber|mercado|salario|aluguel|mes|meses|ano)\b/.test(

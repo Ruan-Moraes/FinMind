@@ -29,18 +29,19 @@ export const changePeriodToolSchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100),
 });
 export const upsertGoalToolSchema = z.object({
-  goalId: z.string().optional(), matchTitle: z.string().optional(), title: z.string().trim().min(1),
-  targetAmountBRL: z.coerce.number().positive(), targetMonth: z.coerce.number().int().min(1).max(12),
-  targetYear: z.coerce.number().int().min(2000).max(2100), notes: z.string().optional(),
+  goalId: z.string().optional(), matchTitle: z.string().optional(), title: z.string().trim().min(1).optional(),
+  targetAmountBRL: z.coerce.number().positive().optional(), targetMonth: z.coerce.number().int().min(1).max(12).optional(),
+  targetYear: z.coerce.number().int().min(2000).max(2100).optional(), notes: z.string().optional(),
 });
 export const deleteGoalToolSchema = z.object({ goalId: z.string().optional(), matchTitle: z.string().min(1) });
+/** Na edição (matchDescription), campos omitidos mantêm o valor atual da regra; na criação, valem os padrões. */
 export const upsertStaticRuleToolSchema = z.object({
-  description: z.string().trim().min(1), type: z.enum(['INCOME', 'EXPENSE']), amountBRL: z.coerce.number().positive(),
-  dayOfMonth: z.coerce.number().int().min(1).max(31).default(5),
-  dayType: z.enum(['CALENDAR_DAY', 'BUSINESS_DAY']).default('CALENDAR_DAY'), includeSaturday: z.boolean().default(false),
+  description: z.string().trim().min(1).optional(), type: z.enum(['INCOME', 'EXPENSE']).optional(),
+  amountBRL: z.coerce.number().positive().optional(),
+  dayOfMonth: z.coerce.number().int().min(1).max(31).optional(),
+  dayType: z.enum(['CALENDAR_DAY', 'BUSINESS_DAY']).optional(), includeSaturday: z.boolean().optional(),
   matchDescription: z.string().trim().optional(), categoryName: z.string().optional(), accountName: z.string().optional(),
-}).refine((v) => v.dayType !== 'BUSINESS_DAY' || v.dayOfMonth <= 23, {
-  message: 'Para dia útil, o limite é do 1º ao 23º dia útil do mês.', path: ['dayOfMonth'],
+  cardName: z.string().optional(), removeCard: z.boolean().optional(),
 });
 export const createTransactionToolSchema = z.object({
   type: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']), nature: z.enum(['STATIC', 'VARIABLE']).default('VARIABLE'),
@@ -52,12 +53,13 @@ export const createTransactionToolSchema = z.object({
   tags: z.string().optional(),
 });
 export const upsertValueForecastToolSchema = z.object({
-  title: z.string().trim().min(1), type: z.enum(['INCOME', 'EXPENSE']), amountBRL: z.coerce.number().positive(),
-  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), notes: z.string().optional(),
+  matchTitle: z.string().trim().optional(),
+  title: z.string().trim().min(1).optional(), type: z.enum(['INCOME', 'EXPENSE']).optional(), amountBRL: z.coerce.number().positive().optional(),
+  expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), notes: z.string().optional(),
 });
 export const updatePreferencesToolSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK', 'SYSTEM']).optional(), density: z.enum(['COMFORTABLE', 'COMPACT']).optional(),
-  hideValuesByDefault: z.boolean().optional(), fiscalMonthStartDay: z.coerce.number().int().min(1).max(31).optional(),
+  hideValuesByDefault: z.boolean().optional(), fiscalMonthStartDay: z.coerce.number().int().min(1).max(28).optional(),
   holidayState: z.string().trim().max(2).nullable().optional(), holidayCity: z.string().trim().max(120).nullable().optional(),
 });
 
@@ -150,7 +152,7 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   },
   {
     name: 'upsert_portfolio_goal',
-    description: 'Cria uma nova Meta de Carteira ou altera uma meta existente (exige confirmação do usuário).',
+    description: 'Cria uma nova Meta de Carteira (title, targetAmountBRL, targetMonth e targetYear obrigatórios) ou altera uma existente informando matchTitle — na edição, envie só os campos que mudam; os demais são mantidos. Exige confirmação.',
     parameters: {
       type: 'object',
       properties: {
@@ -161,7 +163,6 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
         targetYear: { type: 'integer' },
         notes: { type: 'string' },
       },
-      required: ['title', 'targetAmountBRL', 'targetMonth', 'targetYear'],
     },
   },
   {
@@ -178,7 +179,7 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   {
     name: 'upsert_static_rule',
     description:
-      'Cria um Custo/Ganho Estático mensal (Dia Fixo 1-31 ou Dia Útil 1-23) OU edita uma regra existente informando matchDescription (parte da descrição atual). Sem matchDescription, sempre cria uma regra nova.',
+      'Cria um Custo/Ganho Estático mensal (Dia Fixo 1-31 ou Dia Útil 1-23; description, type e amountBRL obrigatórios) OU edita uma regra existente informando matchDescription (parte da descrição atual). Na edição, envie SÓ os campos que mudam: os omitidos (dia, tipo de dia, conta, cartão, categoria) são mantidos. Custo fixo pago no cartão: informe cardName; para desvincular o cartão, removeCard=true. Sem matchDescription, sempre cria uma regra nova.',
     parameters: {
       type: 'object',
       properties: {
@@ -191,8 +192,9 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
         dayOfMonth: { type: 'integer' },
         dayType: { type: 'string', enum: ['CALENDAR_DAY', 'BUSINESS_DAY'] },
         includeSaturday: { type: 'boolean' },
+        cardName: { type: 'string', description: 'Cartão de crédito em que o custo fixo é cobrado (somente EXPENSE).' },
+        removeCard: { type: 'boolean', description: 'true para desvincular o cartão da regra.' },
       },
-      required: ['description', 'type', 'amountBRL'],
     },
   },
   {
@@ -220,17 +222,17 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   },
   {
     name: 'upsert_value_forecast',
-    description: 'Adiciona um item em Previsão de Valor (Vou Ganhar ou Provável Gasto).',
+    description: 'Adiciona um item em Previsão de Valor (Vou Ganhar = INCOME ou Provável Gasto = EXPENSE; title, type, amountBRL e expectedDate obrigatórios) OU edita um existente informando matchTitle — na edição, envie só os campos que mudam. Título repetido é recusado para não duplicar.',
     parameters: {
       type: 'object',
       properties: {
+        matchTitle: { type: 'string', description: 'Título (ou parte) do item existente a editar. Omita para criar.' },
         title: { type: 'string' },
         type: { type: 'string', enum: ['INCOME', 'EXPENSE'] },
         amountBRL: { type: 'number' },
         expectedDate: { type: 'string', description: 'YYYY-MM-DD' },
         notes: { type: 'string' },
       },
-      required: ['title', 'type', 'amountBRL', 'expectedDate'],
     },
   },
   {
@@ -242,7 +244,7 @@ const UI_AND_MUTATION_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
         theme: { type: 'string', enum: ['LIGHT', 'DARK', 'SYSTEM'] },
         density: { type: 'string', enum: ['COMFORTABLE', 'COMPACT'] },
         hideValuesByDefault: { type: 'boolean' },
-        fiscalMonthStartDay: { type: 'integer' },
+        fiscalMonthStartDay: { type: 'integer', description: 'Dia de início do ciclo mensal, de 1 a 28.' },
         holidayState: { type: 'string' },
         holidayCity: { type: 'string' },
       },

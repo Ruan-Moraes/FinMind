@@ -87,7 +87,8 @@ export const userSettingsSchema = z.object({
   theme: z.enum(['LIGHT', 'DARK', 'SYSTEM']).optional(),
   density: z.enum(['COMFORTABLE', 'COMPACT']).optional(),
   hideValuesByDefault: z.boolean().optional(),
-  fiscalMonthStartDay: z.coerce.number().int().min(1).max(31).optional(),
+  // O motor do calendário fiscal limita o ciclo a 28 (todo mês tem esse dia); valores 29–31 antigos viram 28.
+  fiscalMonthStartDay: z.coerce.number().int().min(1).max(31).transform((v) => Math.min(v, 28)).optional(),
   defaultAccountId: z.string().nullable().optional(),
   holidayState: z.string().trim().max(2).nullable().optional(),
   holidayCity: z.string().trim().max(120).nullable().optional(),

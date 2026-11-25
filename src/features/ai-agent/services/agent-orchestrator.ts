@@ -18,6 +18,7 @@ import { detectDeterministicToolCalls } from '@/features/ai-agent/services/agent
 import {
   buildNonFinancialFallbackReply,
   detectConversationalReply,
+  detectUnsupportedLocalMutation,
   isFinancialAnalyticsQuery,
 } from '@/features/ai-agent/services/agent-conversational-classifier';
 import { composeAgentTurnFromTools } from '@/features/ai-agent/services/agent-tool-plan-builder';
@@ -27,6 +28,20 @@ import {
   runLiveAgentToolLoop,
 } from '@/features/ai-agent/services/agent-react-loop';
 import { loadAnalyticsExecutionContext } from '@/features/ai-agent/tools/tool-executors-analytics';
+
+/** Mensagem curta e acionável para falhas do provedor (sem despejar o corpo bruto do erro, que pode citar a chave). */
+export function describeProviderFailure(modelName: string, err: unknown): string {
+  const raw = err instanceof Error ? err.message : '';
+  const status = raw.match(/HTTP (\d{3})/)?.[1];
+  const suffix = 'operando em modo local sobre seus dados reais.';
+  if (status === '401' || status === '403') {
+    return `A chave de API de ${modelName} foi recusada pelo provedor (HTTP ${status}). Atualize-a em Copiloto IA & Extrato → Conector de Provedores; ${suffix}`;
+  }
+  if (status === '429') return `Cota ou limite de uso de ${modelName} excedido (HTTP 429); ${suffix}`;
+  if (/abort/i.test(raw)) return `${modelName} não respondeu a tempo; ${suffix}`;
+  const detail = raw.replace(/sk-[A-Za-z0-9*_-]{6,}/g, 'sk-••••').slice(0, 160);
+  return `Provedor ${modelName} indisponível${detail ? ` (${detail})` : ''}; ${suffix}`;
+}
 
 async function loadRecentSessionHistory(
   sessionId: string | null | undefined,
@@ -70,23 +85,36 @@ export async function runAgentPlanningTurn(params: {
     await createAgentAuditLog({
       userId, sessionId, runId,
       idempotencyKey: generateIdempotencyKey(runId, 'blocked_security_intent'),
-      modality: 'INTERACTIVE_GUIDE', toolName: 'reset_all_data', riskLevel: 'BLOCKED',
+      modality: 'INTERACTIVE_GUIDE', toolName: blockedCheck.toolName ?? 'reset_all_data', riskLevel: 'BLOCKED',
       status: 'CANCELLED', rawParams: { message: cleanMsg }, errorMessage: blockedCheck.reason,
     });
     return {
       runId, modality: 'INTERACTIVE_GUIDE', narrative: blockedCheck.reason!,
       providerUsed: 'FINMIND_SECURITY_GUARD', modelUsed: 'Política de Segurança do Agente',
       executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: [],
-      visualSteps: [
-        { id: 'sec1', action: 'OPEN_MODAL', modalType: 'SETTINGS', targetId: 'header.btn.settings', caption: 'Abrindo Configurações (orientação segura)' },
-        {
-          id: 'sec2', action: 'SCROLL_TO', targetId: 'modal.settings.dangerZone',
-          caption: 'Zona de Perigo: exige confirmação manual',
-          tooltipTitle: 'Ação Bloqueada por Segurança',
-          tooltipBody: 'Operações destrutivas exigem confirmação manual com seu nome completo.',
-          tone: 'amber', persistCoachmark: true, pauseMs: 750,
-        },
-      ],
+      visualSteps: blockedCheck.toolName === 'update_api_keys'
+        ? [
+            { id: 'sec1', action: 'SWITCH_TAB', tab: 'ai', targetId: 'nav.tab.ai', caption: 'Abrindo Copiloto IA & Extrato' },
+            {
+              id: 'sec2', action: 'SCROLL_TO', targetId: 'ai.panel.providers',
+              caption: 'Conector de Provedores: gerencie suas chaves aqui',
+              tooltipTitle: 'Ação Bloqueada por Segurança',
+              tooltipBody: 'Chaves de API só podem ser cadastradas ou trocadas por você neste painel; elas nunca são exibidas.',
+              tone: 'amber', persistCoachmark: true, pauseMs: 750,
+            },
+          ]
+        : blockedCheck.toolName === 'change_password'
+          ? [{ id: 'sec1', action: 'OPEN_MODAL', modalType: 'SETTINGS', targetId: 'header.btn.settings', caption: 'Abrindo Configurações (troca de senha é manual)' }]
+          : [
+              { id: 'sec1', action: 'OPEN_MODAL', modalType: 'SETTINGS', targetId: 'header.btn.settings', caption: 'Abrindo Configurações (orientação segura)' },
+              {
+                id: 'sec2', action: 'SCROLL_TO', targetId: 'modal.settings.dangerZone',
+                caption: 'Zona de Perigo: exige confirmação manual',
+                tooltipTitle: 'Ação Bloqueada por Segurança',
+                tooltipBody: 'Operações destrutivas exigem confirmação manual com seu nome completo.',
+                tone: 'amber', persistCoachmark: true, pauseMs: 750,
+              },
+            ],
       dryRunGuide: true, answeredAt: new Date().toISOString(),
     };
   }
@@ -113,7 +141,7 @@ export async function runAgentPlanningTurn(params: {
       const kbBlock = systemKb.chunks.map((c) => c.contentText).join('\n\n');
       const systemInstruction = buildAgentSystemPrompt({ uiState, interactionMode, kbBlock });
       const loopResult = await runLiveAgentToolLoop({
-        provider: activeAi.provider, apiKey: activeAi.apiKey, modelId: descriptor.id,
+        userId, provider: activeAi.provider, apiKey: activeAi.apiKey, modelId: descriptor.id,
         systemInstruction, historyMessages, cleanMsg, analyticsCtx,
       });
 
@@ -122,7 +150,7 @@ export async function runAgentPlanningTurn(params: {
         actionTools: loopResult.actionTools,
         contentBlocks: loopResult.contentBlocks,
         interactionMode,
-        llmNarrative: loopResult.finalNarrative,
+        llmNarrative: [loopResult.finalNarrative, ...loopResult.unrelayedErrors].filter((t) => t.trim()).join('\n\n'),
         executionMode: 'LIVE_AGENT_TOOLS',
         providerLabel: descriptor.providerGroupLabel,
         modelLabel: descriptor.displayName,
@@ -132,10 +160,7 @@ export async function runAgentPlanningTurn(params: {
         executionTrace: loopResult.executionTrace,
       });
     } catch (err) {
-      apiWarning =
-        err instanceof Error
-          ? `Provedor ${descriptor.displayName} indisponível (${err.message}); operando com motor determinístico local sobre seus dados reais.`
-          : 'Provedor externo indisponível; operando em modo local.';
+      apiWarning = describeProviderFailure(descriptor.displayName, err);
     }
   } else if (activeAi.hasKey && !descriptor) {
     apiWarning =
@@ -166,6 +191,16 @@ export async function runAgentPlanningTurn(params: {
         steps: deterministicTools.map((t) => ({ toolName: t.name, phase: 'UI_ACTION', status: 'OK', durationMs: 0 })),
       },
     });
+  }
+
+  const unsupportedMutation = detectUnsupportedLocalMutation(cleanMsg);
+  if (unsupportedMutation) {
+    return {
+      runId, modality: 'ANALYTICAL', narrative: unsupportedMutation,
+      providerUsed: 'FINMIND_AGENT_LOCAL', modelUsed: 'Assistente Local',
+      executionMode: 'DETERMINISTIC_AGENT_LOCAL', systemSources: [], visualSteps: [],
+      dryRunGuide: false, apiWarning, answeredAt: new Date().toISOString(),
+    };
   }
 
   if (isFinancialAnalyticsQuery(cleanMsg)) {

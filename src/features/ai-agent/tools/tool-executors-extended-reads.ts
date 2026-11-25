@@ -5,6 +5,7 @@ import {
   queryBudgetsToolSchema,
   queryCategoriesToolSchema,
   queryInvoicesToolSchema,
+  queryHealthReportsToolSchema,
   queryStaticRulesToolSchema,
 } from '@/features/ai-agent/tools/tool-catalog-extended';
 import type { AnalyticsExecutionContext } from '@/features/ai-agent/tools/tool-executors-analytics';
@@ -61,7 +62,7 @@ export async function executeExtendedReadTool(
     const args = queryStaticRulesToolSchema.parse(rawArgs);
     const month = args.month || selectedMonth;
     const year = args.year || selectedYear;
-    const rules = await prisma.recurrenceRule.findMany({ where: { userId }, include: { category: true, account: true }, orderBy: { createdAt: 'asc' } });
+    const rules = await prisma.recurrenceRule.findMany({ where: { userId }, include: { category: true, account: true, creditCard: true }, orderBy: { createdAt: 'asc' } });
     return {
       period: `${MONTH_NAMES_PT[month - 1]}/${year}`,
       monthKey: formatMonthKey(year, month),
@@ -75,6 +76,7 @@ export async function executeExtendedReadTool(
         dueDay: r.dayType === 'BUSINESS_DAY' ? `${r.dayOfMonth}º dia útil${r.includeSaturday ? ' (sábado conta)' : ''}` : `dia ${r.dayOfMonth}`,
         category: r.category?.name ?? null,
         account: r.account?.name ?? null,
+        creditCard: r.creditCard?.name ?? null,
       })),
     };
   }
@@ -113,6 +115,37 @@ export async function executeExtendedReadTool(
       orderBy: { name: 'asc' },
     });
     return { count: categories.length, categories: categories.map((c) => ({ name: c.name, type: c.type, defaultNature: c.defaultNature })) };
+  }
+
+  if (toolName === 'query_health_reports') {
+    const args = queryHealthReportsToolSchema.parse(rawArgs);
+    const reports = await prisma.aiAnalysisReport.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: args.limit,
+    });
+    const parseList = (raw: string) => {
+      try {
+        const v = JSON.parse(raw);
+        return Array.isArray(v) ? v.map(String) : [];
+      } catch {
+        return [];
+      }
+    };
+    return {
+      totalReturned: reports.length,
+      note: reports.length === 0 ? 'Nenhum diagnóstico salvo. O usuário gera um em Copiloto IA > Diagnóstico (Gerar Diagnóstico Agora).' : undefined,
+      reports: reports.map((r) => ({
+        createdAt: r.createdAt.toISOString(),
+        healthScore: r.healthScore,
+        band: r.healthScore >= 70 ? 'Saudável' : r.healthScore >= 40 ? 'Atenção' : 'Crítico',
+        provider: r.provider,
+        summary: r.summary,
+        strengths: parseList(r.strengthsJson),
+        risks: parseList(r.risksJson),
+        actionPlan: parseList(r.actionPlanJson),
+      })),
+    };
   }
 
   throw new Error(`Ferramenta de leitura não suportada: ${toolName}`);

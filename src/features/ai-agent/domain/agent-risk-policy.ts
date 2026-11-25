@@ -11,6 +11,7 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
   query_static_rules: 'L0',
   query_credit_card_invoices: 'L0',
   query_categories: 'L0',
+  query_health_reports: 'L0',
   search_financial_history: 'L0',
   generate_financial_report: 'L0',
   render_visual_content: 'L0',
@@ -46,6 +47,8 @@ export const TOOL_RISK_POLICY: Record<string, AgentRiskLevel> = {
   delete_budget: 'L3',
   delete_transaction: 'L3',
   delete_value_forecast: 'L3',
+  delete_balance_target: 'L3',
+  delete_category: 'L3',
 
   // BLOCKED: Segurança crítica / destrutivo irreversível
   reset_all_data: 'BLOCKED',
@@ -93,6 +96,8 @@ export function redactSensitiveParams(params: Record<string, unknown>): Record<s
 export function detectBlockedSecurityIntent(prompt: string): {
   blocked: boolean;
   reason?: string;
+  /** Ferramenta bloqueada correspondente (registrada na auditoria). */
+  toolName?: 'reset_all_data' | 'update_api_keys' | 'change_password';
 } {
   const norm = prompt
     .normalize('NFD')
@@ -107,6 +112,7 @@ export function detectBlockedSecurityIntent(prompt: string): {
   ) {
     return {
       blocked: true,
+      toolName: 'reset_all_data',
       reason:
         'Por segurança, o Reset Geral de Dados é uma operação bloqueada para execução autônoma pela IA. Posso, porém, abrir as Configurações e mostrar onde fica a Zona de Perigo para você confirmar manualmente com seu nome completo.',
     };
@@ -120,6 +126,7 @@ export function detectBlockedSecurityIntent(prompt: string): {
   ) {
     return {
       blocked: true,
+      toolName: /\bsenha\b/.test(norm) ? 'change_password' : 'update_api_keys',
       reason:
         'Credenciais, senhas e chaves de API são protegidas e nunca são exibidas ou alteradas autonomamente pela IA. Posso guiá-lo até o Conector de Provedores para você gerenciar com segurança.',
     };

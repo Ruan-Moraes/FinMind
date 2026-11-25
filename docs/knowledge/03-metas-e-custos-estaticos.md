@@ -1,9 +1,9 @@
 ---
 docId: goals-and-static-rules
 module: goals
-version: 1.3.0
+version: 1.4.0
 screens: ["goals", "modal:GOAL", "modal:STATIC_RULE", "modal:BUDGET", "modal:CATEGORY"]
-relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "upsert_category", "categorize_transactions", "upsert_budget", "delete_budget", "delete_static_rule", "set_static_rule_month", "query_budgets", "query_static_rules", "query_categories", "query_portfolio_goals"]
+relatedTools: ["navigate_to_section", "guide_feature_workflow", "capture_annotated_screen", "upsert_portfolio_goal", "delete_portfolio_goal", "upsert_static_rule", "upsert_category", "categorize_transactions", "upsert_budget", "delete_budget", "delete_static_rule", "set_static_rule_month", "query_budgets", "query_static_rules", "query_categories", "query_portfolio_goals", "delete_category"]
 tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo estatico", "ganho estatico", "dia util", "orcamento", "limite de gasto", "categoria", "categorias de gastos"]
 ---
 
@@ -29,6 +29,7 @@ tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo est
 
 ## Fluxo: Custos e Ganhos Estáticos com Dia Útil (`modal:STATIC_RULE`)
 - Permite cadastrar receitas ou despesas fixas mensais (`modal.staticRule.input.description`, `modal.staticRule.input.amount`).
+- **Custo fixo no cartão:** um custo estático pode ser vinculado a um cartão de crédito (ex.: assinaturas cobradas no cartão); enquanto não for lançado no mês, ele é somado ao limite usado daquele cartão.
 - No campo de vencimento/recebimento, suporta **Dia Fixo** (1 a 31) ou **Dia Útil** (1 a 23, ex.: 5º dia útil), com opção **Regra CLT (considerar sábado como dia útil)** e prévia em tempo real considerando os feriados configurados em Configurações.
 - **Menu contextual (`⋯`) por regra fixa:** Cada item na tabela **Regras Fixas Mensais** possui um menu `⋯` organizado em *Apenas neste mês* (**Ajustar valor neste mês**, **Pular neste mês / Reativar neste mês**) e *Regra mensal fixa* (**Editar regra fixa**, **Excluir regra**).
 - **Ajuste de valor em mês específico (`monthlyOverrides`):** Também pode ser feito clicando diretamente no valor da linha, alterando o valor apenas daquele mês sem afetar os próximos meses (com opção de restaurar ao valor base).
@@ -56,7 +57,7 @@ tags: ["meta", "carteira", "patrimonio", "metas juntas", "simulador", "custo est
 - Orçamentos (`Budget`) têm chave única por `(categoria, mês, ano)`; salvar para a mesma categoria atualiza o teto existente.
 
 ## O que o Agente IA pode fazer aqui
-- **Metas:** criar, alterar (informando o nome da meta existente) e excluir. Se a meta citada não for encontrada, o agente pergunta em vez de criar uma nova por engano.
-- **Regras fixas:** criar, **editar** (informando a descrição atual em `matchDescription`), excluir, e ações pontuais por mês: **pular**, **reativar**, **ajustar valor só naquele mês** e **voltar ao valor base** (`set_static_rule_month`). Criar uma regra com a mesma descrição de outra existente é recusado para evitar duplicidade. Dia útil vai de 1º a 23º.
+- **Metas:** criar, alterar (informando o nome da meta existente; só os campos citados mudam) e excluir. Se a meta citada não for encontrada ou houver mais de uma parecida, o agente pergunta em vez de criar ou excluir por engano.
+- **Regras fixas:** criar, **editar** (informando a descrição atual em `matchDescription`; dia, tipo de dia, conta, categoria e cartão não citados são mantidos), vincular ao cartão (`cardName`) ou desvincular (`removeCard`), excluir, e ações pontuais por mês: **pular**, **reativar**, **ajustar valor só naquele mês** e **voltar ao valor base** (`set_static_rule_month`). Criar uma regra com a mesma descrição de outra existente é recusado para evitar duplicidade. Dia útil vai de 1º a 23º.
 - **Orçamentos:** definir, alterar e remover o limite de uma categoria de despesa (`upsert_budget`, `delete_budget`); consultar consumo, saldo restante e status (OK, ATENÇÃO ≥70%, CRÍTICO ≥90%, ESTOURADO) com `query_budgets`.
-- **Categorias:** criar/editar e classificar lançamentos em lote.
+- **Categorias:** criar/editar, **excluir** (`delete_category`: os lançamentos e regras ficam sem categoria e os limites dela são removidos; o cartão mostra o impacto e o Desfazer religa tudo) e classificar lançamentos em lote (com aprendizado para próximas importações).

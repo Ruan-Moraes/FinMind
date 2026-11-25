@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { prisma } from '@/shared/lib/prisma';
+import { resolveByName } from '@/features/ai-agent/tools/entity-resolvers';
 import { formatCentsToBRL, MONTH_NAMES_PT } from '@/shared/lib/currency';
 import {
   deleteGoalToolSchema,
@@ -7,37 +9,54 @@ import {
 import type { AgentToolExecutor } from '@/features/ai-agent/tools/tool-executor-types';
 
 const brlToCents = (val: number) => Math.round(val * 100);
+
+const resolvedGoalSchema = z.object({
+  goalId: z.string().optional(),
+  title: z.string().trim().min(1),
+  targetAmountBRL: z.coerce.number().positive(),
+  targetMonth: z.coerce.number().int().min(1).max(12),
+  targetYear: z.coerce.number().int().min(2000).max(2100),
+  notes: z.string().optional(),
+});
 const formatBrlInput = (cents: number) => (cents / 100).toFixed(2).replace('.', ',');
 
 export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
   async preparePreview(userId, rawArgs) {
     const parsed = upsertGoalToolSchema.parse(rawArgs);
-    const targetCents = brlToCents(parsed.targetAmountBRL);
 
     let existing = parsed.goalId
       ? await prisma.portfolioGoal.findFirst({ where: { id: parsed.goalId, userId } })
       : null;
+    if (parsed.goalId && !existing) throw new Error('Não encontrei a meta informada para alterar.');
 
-    const matchNeedle = parsed.matchTitle?.trim().toLowerCase() || '';
-    if (!existing && matchNeedle) {
+    if (!existing && parsed.matchTitle?.trim()) {
       const goals = await prisma.portfolioGoal.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } });
-      existing = goals.find((g) => g.title.toLowerCase().includes(matchNeedle)) || null;
+      const found = resolveByName(goals.map((g) => ({ ...g, name: g.title })), parsed.matchTitle, 'meta');
+      existing = goals.find((g) => g.id === found.id) || null;
     }
 
-    if (!existing && (parsed.goalId || matchNeedle)) {
-      throw new Error(
-        `Não encontrei a meta "${parsed.matchTitle || parsed.goalId}" para alterar. Diga o nome exato da meta (ou peça para criar uma nova).`
-      );
+    if (!existing) {
+      const missing = [
+        !parsed.title && 'title',
+        parsed.targetAmountBRL === undefined && 'targetAmountBRL',
+        parsed.targetMonth === undefined && 'targetMonth',
+        parsed.targetYear === undefined && 'targetYear',
+      ].filter(Boolean);
+      if (missing.length > 0) throw new Error(`Para criar a meta, faltam: ${missing.join(', ')}. Para alterar uma meta existente, informe matchTitle.`);
     }
 
+    // Na edição, campos omitidos mantêm o valor atual.
+    const targetCents = parsed.targetAmountBRL !== undefined ? brlToCents(parsed.targetAmountBRL) : existing!.targetAmountInCents;
+    const effectiveTitle = parsed.title || existing!.title;
+    const targetMonth = parsed.targetMonth ?? existing!.targetMonth;
+    const targetYear = parsed.targetYear ?? existing!.targetYear;
+    const monthLabel = `${MONTH_NAMES_PT[targetMonth - 1]}/${targetYear}`;
     const isUpdate = Boolean(existing);
-    const effectiveTitle = isUpdate && parsed.title === 'Meta Financeira' ? existing!.title : parsed.title;
-    const monthLabel = `${MONTH_NAMES_PT[parsed.targetMonth - 1]}/${parsed.targetYear}`;
 
     return {
       title: isUpdate ? `Alterar Meta: ${existing!.title}` : `Criar Meta: ${effectiveTitle}`,
       summary: isUpdate
-        ? `Atualizar o valor alvo da meta "${existing!.title}" para ${formatCentsToBRL(targetCents)} (${monthLabel}).`
+        ? `Atualizar a meta "${existing!.title}": ${effectiveTitle !== existing!.title ? `título "${effectiveTitle}", ` : ''}alvo ${formatCentsToBRL(targetCents)} até ${monthLabel}.`
         : `Cadastrar nova Meta de Carteira "${effectiveTitle}" de ${formatCentsToBRL(targetCents)} para ${monthLabel}.`,
       beforePreview: existing
         ? [
@@ -65,9 +84,9 @@ export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
       normalizedParams: {
         goalId: existing?.id,
         title: effectiveTitle,
-        targetAmountBRL: parsed.targetAmountBRL,
-        targetMonth: parsed.targetMonth,
-        targetYear: parsed.targetYear,
+        targetAmountBRL: targetCents / 100,
+        targetMonth,
+        targetYear,
         notes: parsed.notes ?? existing?.notes ?? undefined,
       },
       postConfirmVisualSteps: [
@@ -92,7 +111,7 @@ export const upsertPortfolioGoalExecutor: AgentToolExecutor = {
   },
 
   async executeAndVerify(userId, params) {
-    const parsed = upsertGoalToolSchema.parse(params);
+    const parsed = resolvedGoalSchema.parse(params);
     const targetCents = brlToCents(parsed.targetAmountBRL);
     let savedId: string;
 
@@ -170,9 +189,8 @@ export const deletePortfolioGoalExecutor: AgentToolExecutor = {
   async preparePreview(userId, rawArgs) {
     const parsed = deleteGoalToolSchema.parse(rawArgs);
     const goals = await prisma.portfolioGoal.findMany({ where: { userId } });
-    const match = parsed.goalId
-      ? goals.find((g) => g.id === parsed.goalId)
-      : goals.find((g) => g.title.toLowerCase().includes(parsed.matchTitle.toLowerCase()));
+    const byId = parsed.goalId ? goals.find((g) => g.id === parsed.goalId) : undefined;
+    const match = byId ?? goals.find((g) => g.id === resolveByName(goals.map((x) => ({ ...x, name: x.title })), parsed.matchTitle, 'meta').id);
     if (!match) throw new Error(`Não encontrei nenhuma meta correspondente a "${parsed.matchTitle}".`);
     return {
       title: `Excluir Meta: ${match.title}`,

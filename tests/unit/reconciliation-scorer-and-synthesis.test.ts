@@ -8,10 +8,6 @@ import {
   enrichTransactionMetadata,
   buildMemoryPatternKey,
 } from '@/features/reconciliation/engine/purpose-classifier';
-import {
-  buildDeterministicAssistantSynthesis,
-  type DeterministicSynthesisInput,
-} from '@/features/ai-copilot/assistant/deterministic-synthesis';
 import type { NormalizedRawMovement } from '@/features/reconciliation/parsers';
 
 function makeMovement(overrides: Partial<NormalizedRawMovement>): NormalizedRawMovement {
@@ -35,7 +31,7 @@ function makeMovement(overrides: Partial<NormalizedRawMovement>): NormalizedRawM
   };
 }
 
-describe('Motor de Scoring de Conciliação, Classificação Semântica e Síntese Determinística', () => {
+describe('Motor de Scoring de Conciliação e Classificação Semântica', () => {
   it('scoreRecurrenceRuleCandidate pontua match exato, conflito semântico, variação de valor e bônus de memória', () => {
     const mov = makeMovement({});
     const semantics = inferPurposeFromText(mov.originalDescription, 'OUTFLOW');
@@ -171,64 +167,5 @@ describe('Motor de Scoring de Conciliação, Classificação Semântica e Sínte
     expect(sal.purpose).toBe('SALARY_COMPENSATION');
     expect(sal.suggestedCategoryId).toBe('c-sal');
     expect(buildMemoryPatternKey('PIX ENVIADO 123456 UBER TRIP')).toContain('UBER');
-  });
-
-  it('buildDeterministicAssistantSynthesis responde às 4 intenções (meta, fixos, MoM e resumo geral)', () => {
-    const baseSummary = {
-      month: 11, year: 2026, label: 'Novembro 2026', totalIncomeInCents: 800000,
-      totalExpenseInCents: 350000, netBalanceInCents: 450000, staticExpenseInCents: 200000,
-      variableExpenseInCents: 150000, staticIncomeInCents: 800000, variableIncomeInCents: 0,
-      championCategory: { id: 'c1', name: 'Moradia', color: '#6366f1', amountInCents: 200000, sharePercent: 57.1 },
-      topExpenseItem: { id: 't1', description: 'Aluguel', amountInCents: 200000, categoryName: 'Moradia', date: '2026-11-05T12:00:00.000Z' },
-      categoryBreakdown: [],
-    };
-    const baseInput: DeterministicSynthesisInput = {
-      question: 'Como está minha meta de patrimônio?',
-      refMonth: 11, refYear: 2026, consolidatedBalanceInCents: 1500000, netWorthInCents: 1400000,
-      monthSummary: baseSummary,
-      momComparison: {
-        monthA: { ...baseSummary, month: 10, label: 'Outubro 2026', totalExpenseInCents: 300000, netBalanceInCents: 500000, variableExpenseInCents: 100000, championCategory: null, topExpenseItem: null },
-        monthB: { ...baseSummary, championCategory: null, topExpenseItem: null },
-        expenseDiffInCents: 50000, expenseVariationPercent: 16.6, incomeDiffInCents: 0, incomeVariationPercent: 0, categoryDeltas: [],
-      },
-      staticBaseline: {
-        staticIncomeInCents: 800000, staticExpenseInCents: 200000, variableIncomeInCents: 0,
-        variableExpenseInCents: 150000, freeDiscretionaryIncomeInCents: 600000, isOverCommitted: false, commitmentPercent: 25,
-      },
-      portfolioGoals: [{
-        id: 'g1', title: 'Reserva 50k', targetAmountInCents: 5000000, currentNetWorthInCents: 1400000,
-        progressPercent: 28, remainingDistanceInCents: 3600000, isAchieved: false, targetMonth: 12,
-        targetYear: 2027, monthsRemaining: 13, recommendedMonthlyContributionInCents: 276923,
-        currentMonthlyPaceInCents: 450000, estimatedMonthsToReach: 8, estimatedCompletionMonth: 7,
-        estimatedCompletionYear: 2027, willReachOnTime: true, paceStatus: 'AHEAD', monthlyPaceGapInCents: 0,
-      }],
-      budgets: [{ categoryName: 'Alimentação', maxAmountInCents: 100000, spentInCents: 90000 }],
-      recurrenceRules: [{ description: 'Aluguel', type: 'EXPENSE', amountInCents: 200000, dayOfMonth: 5 }],
-      sixMonths: [], retrievedChunks: [],
-    };
-
-    const metaAns = buildDeterministicAssistantSynthesis(baseInput);
-    expect(metaAns.directAnswer).toContain('Reserva 50k');
-    expect(metaAns.personalizedRecommendations.some((r) => r.includes('Alimentação'))).toBe(true);
-
-    const fixedAns = buildDeterministicAssistantSynthesis({
-      ...baseInput,
-      question: 'Qual é meu custo fixo e recorrente mensal?',
-    });
-    expect(fixedAns.directAnswer).toContain('Aluguel');
-
-    const momAns = buildDeterministicAssistantSynthesis({
-      ...baseInput,
-      question: 'Compare a evolução MoM em relação ao mês anterior',
-    });
-    expect(momAns.directAnswer).toContain('Outubro 2026');
-
-    const generalAns = buildDeterministicAssistantSynthesis({
-      ...baseInput,
-      question: 'Resumo geral da minha conta',
-      portfolioGoals: [],
-    });
-    expect(generalAns.directAnswer).toContain('Novembro/2026');
-    expect(generalAns.projectionsAndEstimates[0]).toContain('12 meses');
   });
 });

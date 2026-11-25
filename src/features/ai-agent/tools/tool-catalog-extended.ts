@@ -10,6 +10,7 @@ export const queryBudgetsToolSchema = z.object({ month: month.optional(), year: 
 export const queryStaticRulesToolSchema = z.object({ month: month.optional(), year: year.optional() });
 export const queryInvoicesToolSchema = z.object({ cardName: z.string().optional(), onlyUnpaid: z.boolean().default(false) });
 export const queryCategoriesToolSchema = z.object({ type: z.enum(['ALL', 'INCOME', 'EXPENSE']).default('ALL') });
+export const queryHealthReportsToolSchema = z.object({ limit: z.coerce.number().int().min(1).max(10).default(3) });
 
 /* ───────────── Escritas ───────────── */
 export const upsertBudgetToolSchema = z.object({
@@ -56,27 +57,32 @@ export const setStaticRuleMonthToolSchema = z.object({
   message: 'Informe o valor (amountBRL) do ajuste neste mês.', path: ['amountBRL'],
 });
 export const deleteValueForecastToolSchema = z.object({ matchTitle: z.string().trim().min(1) });
+export const deleteBalanceTargetToolSchema = z.object({ matchTitle: z.string().trim().min(1) });
+export const deleteCategoryToolSchema = z.object({
+  categoryName: z.string().trim().min(1),
+  type: z.enum(['INCOME', 'EXPENSE']).optional(),
+});
 export const upsertBalanceTargetToolSchema = z.object({
   matchTitle: z.string().trim().optional(),
-  title: z.string().trim().min(1),
-  plannedBalanceBRL: z.coerce.number().positive(),
-  targetDate: isoDate,
+  title: z.string().trim().min(1).optional(),
+  plannedBalanceBRL: z.coerce.number().positive().optional(),
+  targetDate: isoDate.optional(),
   notes: z.string().optional(),
 });
 export const upsertAccountToolSchema = z.object({
   matchName: z.string().trim().optional(),
   name: z.string().trim().min(1),
-  type: z.enum(['CHECKING', 'SAVINGS', 'CASH']).default('CHECKING'),
+  type: z.enum(['CHECKING', 'SAVINGS', 'CASH']).optional(),
   initialBalanceBRL: z.coerce.number().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 export const upsertCreditCardToolSchema = z.object({
   matchName: z.string().trim().optional(),
   name: z.string().trim().min(1),
-  brand: z.string().trim().default('Mastercard'),
-  limitBRL: z.coerce.number().positive(),
-  closingDay: z.coerce.number().int().min(1).max(31),
-  dueDay: z.coerce.number().int().min(1).max(31),
+  brand: z.string().trim().min(1).optional(),
+  limitBRL: z.coerce.number().positive().optional(),
+  closingDay: z.coerce.number().int().min(1).max(31).optional(),
+  dueDay: z.coerce.number().int().min(1).max(31).optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 export const payInvoiceToolSchema = z.object({
@@ -98,6 +104,7 @@ export const EXTENDED_READ_TOOL_NAMES = new Set([
   'query_static_rules',
   'query_credit_card_invoices',
   'query_categories',
+  'query_health_reports',
 ]);
 
 export const EXTENDED_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
@@ -123,6 +130,20 @@ export const EXTENDED_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
     name: 'query_categories',
     description: 'Lista as categorias cadastradas (nome, tipo, natureza padrão). Use antes de categorizar ou criar orçamentos.',
     parameters: { type: 'object', properties: { type: { type: 'string', enum: ['ALL', 'INCOME', 'EXPENSE'] } } },
+  },
+  {
+    name: 'query_health_reports',
+    description: 'Lê os diagnósticos de saúde financeira já SALVOS no painel do Copiloto IA (nota 0–100, faixa, resumo, pontos fortes, riscos e plano de ação), do mais recente ao mais antigo. Não gera diagnóstico novo.',
+    parameters: { type: 'object', properties: { limit: { type: 'integer', description: 'Quantos diagnósticos (1-10, padrão 3).' } } },
+  },
+  {
+    name: 'delete_category',
+    description: 'Exclui uma categoria (L3, exige confirmação). Os lançamentos e regras fixas dela ficam sem categoria e os orçamentos (limites) dela são removidos; o cartão de confirmação mostra quantos itens são afetados. Desfazer recria a categoria e religa tudo.',
+    parameters: {
+      type: 'object',
+      properties: { categoryName: { type: 'string' }, type: { type: 'string', enum: ['INCOME', 'EXPENSE'], description: 'Use se houver categorias de gasto e de ganho com o mesmo nome.' } },
+      required: ['categoryName'],
+    },
   },
   {
     name: 'upsert_budget',
@@ -183,20 +204,24 @@ export const EXTENDED_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
     parameters: { type: 'object', properties: { matchTitle: { type: 'string' } }, required: ['matchTitle'] },
   },
   {
+    name: 'delete_balance_target',
+    description: 'Exclui uma Meta de Saldo por Data pelo título (L3).',
+    parameters: { type: 'object', properties: { matchTitle: { type: 'string' } }, required: ['matchTitle'] },
+  },
+  {
     name: 'upsert_balance_target',
-    description: 'Cria (ou edita via matchTitle) uma Meta de Saldo por Data: quanto o usuário quer ter acumulado em uma data.',
+    description: 'Cria (title, plannedBalanceBRL e targetDate obrigatórios) ou edita via matchTitle uma Meta de Saldo por Data: quanto o usuário quer ter acumulado em uma data. Na edição, envie só os campos que mudam.',
     parameters: {
       type: 'object',
       properties: {
         matchTitle: { type: 'string' }, title: { type: 'string' }, plannedBalanceBRL: { type: 'number' },
         targetDate: { type: 'string', description: 'YYYY-MM-DD' }, notes: { type: 'string' },
       },
-      required: ['title', 'plannedBalanceBRL', 'targetDate'],
     },
   },
   {
     name: 'upsert_account',
-    description: 'Cria uma conta (CHECKING, SAVINGS ou CASH) ou edita uma existente informando matchName.',
+    description: 'Cria uma conta (CHECKING, SAVINGS ou CASH; padrão CHECKING) ou edita uma existente informando matchName. Na edição, envie só os campos que mudam (name é o nome final); tipo, cor e saldo inicial omitidos são mantidos.',
     parameters: {
       type: 'object',
       properties: {
@@ -208,14 +233,14 @@ export const EXTENDED_TOOL_DECLARATIONS: ProviderToolDeclaration[] = [
   },
   {
     name: 'upsert_credit_card',
-    description: 'Cria um cartão de crédito ou edita um existente informando matchName. Dias de fechamento e vencimento de 1 a 31.',
+    description: 'Cria um cartão de crédito (limitBRL, closingDay e dueDay obrigatórios; bandeira padrão Mastercard) ou edita um existente informando matchName — na edição, envie só os campos que mudam; bandeira, limite, dias e cor omitidos são mantidos. Dias de fechamento e vencimento de 1 a 31.',
     parameters: {
       type: 'object',
       properties: {
         matchName: { type: 'string' }, name: { type: 'string' }, brand: { type: 'string' }, limitBRL: { type: 'number' },
         closingDay: { type: 'integer' }, dueDay: { type: 'integer' }, color: { type: 'string' },
       },
-      required: ['name', 'limitBRL', 'closingDay', 'dueDay'],
+      required: ['name'],
     },
   },
   {

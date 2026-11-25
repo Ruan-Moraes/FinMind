@@ -13,6 +13,13 @@ import {
 } from '@/features/ai-copilot/providers';
 import { resolveActiveUserAiSelection } from '@/features/ai-copilot/services/ai-credentials-service';
 
+/** Nota inválida/ausente não pode virar 80 por acaso: limita a 0–100 e só usa 50 se não for número. */
+function clampHealthScore(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 50;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
 export async function runAiFinancialStatusAnalysisAction(data: {
   allowLocalFallback?: boolean;
   context: {
@@ -63,7 +70,7 @@ export async function runAiFinancialStatusAnalysisAction(data: {
       const parsed = extractJsonFromAiResponse<AiFinancialStatusAnalysis>(rawJson);
       if (parsed && parsed.summary) {
         analysis = {
-          healthScore: Number(parsed.healthScore) || 80,
+          healthScore: clampHealthScore(parsed.healthScore),
           summary: String(parsed.summary),
           strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
           risks: Array.isArray(parsed.risks) ? parsed.risks.map(String) : [],

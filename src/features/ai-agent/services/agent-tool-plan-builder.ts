@@ -1,8 +1,8 @@
 import type { ActiveTab } from '@/features/dashboard/types/workbench-types';
 import {
   getToolRiskLevel,
-  isBlockedRisk,
   requiresExplicitConfirmation,
+  TOOL_RISK_POLICY,
 } from '@/features/ai-agent/domain/agent-risk-policy';
 import type {
   AgentExecutionTrace,
@@ -75,6 +75,7 @@ export async function composeAgentTurnFromTools(
 
   const visualSteps: AgentVisualStep[] = [];
   const narratives: string[] = [];
+  const preparationErrors: string[] = [];
   let dryRunGuide = false;
   const preparedMutations: PreparedMutationEntry[] = [];
   let pendingMutation: PendingAgentMutation | null = null;
@@ -83,7 +84,12 @@ export async function composeAgentTurnFromTools(
 
   for (const selectedTool of actionTools) {
     const risk = getToolRiskLevel(selectedTool.name);
-    if (isBlockedRisk(risk)) {
+    if (!(selectedTool.name in TOOL_RISK_POLICY)) {
+      // Ferramenta inexistente (alucinada): ignora só ela, sem derrubar o restante do turno.
+      preparationErrors.push(`Não consigo executar "${selectedTool.name}": essa ferramenta não existe no FinMind.`);
+      continue;
+    }
+    if (TOOL_RISK_POLICY[selectedTool.name] === 'BLOCKED') {
       return {
         ...base,
         modality: 'INTERACTIVE_GUIDE',
@@ -148,7 +154,7 @@ export async function composeAgentTurnFromTools(
           const cat = await resolveCategory(userId, categoryName);
           filterCategoryId = cat.id;
         } catch (err) {
-          narratives.push(err instanceof Error ? err.message : `Categoria "${categoryName}" não encontrada.`);
+          preparationErrors.push(err instanceof Error ? err.message : `Categoria "${categoryName}" não encontrada.`);
         }
       }
       visualSteps.push(
@@ -176,7 +182,7 @@ export async function composeAgentTurnFromTools(
         preparedMutations.push({ toolName: selectedTool.name, risk, preview });
       } catch (err) {
         const reason = err instanceof Error ? err.message : null;
-        narratives.push(
+        preparationErrors.push(
           reason ||
             `Faltaram parâmetros válidos para preparar "${selectedTool.name}". Informe os dados completos para eu preparar a operação.`
         );
@@ -220,9 +226,9 @@ export async function composeAgentTurnFromTools(
   return {
     ...base,
     modality,
+    // Recusas de preparo são sempre exibidas, mesmo quando o modelo já escreveu uma narrativa.
     narrative:
-      llmNarrative.trim() ||
-      narratives.join('\n\n') ||
+      [llmNarrative.trim() || narratives.join('\n\n'), ...preparationErrors].filter(Boolean).join('\n\n') ||
       'Pronto! Confira os detalhes abaixo.',
     visualSteps,
     dryRunGuide: dryRunGuide && !pendingMutation,
